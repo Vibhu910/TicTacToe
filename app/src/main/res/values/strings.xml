@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">Tic-Tac-Toe</string>
+    <string name="play_against_computer">Play against computer</string>
+    <string name="play_against_human">Play against human</string>
+    <string name="settings">Settings</string>
+    <string name="game_history">Game history</string>
+    <string name="back">Back</string>
+</resources>
