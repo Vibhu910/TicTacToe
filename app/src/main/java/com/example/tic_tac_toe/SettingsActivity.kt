@@ -15,30 +15,49 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tic_tac_toe.ui.theme.TicTacToeTheme
 
-class SettingsActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-
-        setContent {
-            TicTacToeTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    SettingsScreen(
-                        onBack = { finish() }
-                    )
-                }
-            }
+@Composable
+fun ChallengeLevelOption(
+    levelType: SettingsManager.Difficulty,
+    displayTitle: String,
+    displayDescription: String,
+    isChosen: Boolean,
+    onChoose: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .selectable(
+                selected = isChosen,
+                onClick = onChoose
+            )
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        RadioButton(
+            selected = isChosen,
+            onClick = onChoose
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Column {
+            Text(
+                text = displayTitle,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                text = displayDescription,
+                fontSize = 12.sp,
+                color = Color.Gray
+            )
         }
     }
 }
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var selectedDifficulty by remember { 
-        mutableStateOf(SettingsManager.getDifficulty(context))
+fun ConfigurationDisplay(exitAction: () -> Unit) {
+    val appContext = androidx.compose.ui.platform.LocalContext.current
+    var chosenDifficulty by remember { 
+        mutableStateOf(SettingsManager.retrieveDifficulty(appContext))
     }
 
     Column(
@@ -77,36 +96,36 @@ fun SettingsScreen(onBack: () -> Unit) {
                     modifier = Modifier.padding(bottom = 8.dp)
                 )
 
-                DifficultyOption(
-                    difficulty = SettingsManager.Difficulty.EASY,
-                    title = "Easy",
-                    description = "AI makes random moves",
-                    selected = selectedDifficulty == SettingsManager.Difficulty.EASY,
-                    onSelect = {
-                        selectedDifficulty = SettingsManager.Difficulty.EASY
-                        SettingsManager.setDifficulty(context, SettingsManager.Difficulty.EASY)
+                ChallengeLevelOption(
+                    levelType = SettingsManager.Difficulty.EASY,
+                    displayTitle = "Easy",
+                    displayDescription = "AI makes random moves",
+                    isChosen = chosenDifficulty == SettingsManager.Difficulty.EASY,
+                    onChoose = {
+                        chosenDifficulty = SettingsManager.Difficulty.EASY
+                        SettingsManager.updateDifficulty(appContext, SettingsManager.Difficulty.EASY)
                     }
                 )
 
-                DifficultyOption(
-                    difficulty = SettingsManager.Difficulty.MEDIUM,
-                    title = "Medium",
-                    description = "AI makes 50% random, 50% optimal moves",
-                    selected = selectedDifficulty == SettingsManager.Difficulty.MEDIUM,
-                    onSelect = {
-                        selectedDifficulty = SettingsManager.Difficulty.MEDIUM
-                        SettingsManager.setDifficulty(context, SettingsManager.Difficulty.MEDIUM)
+                ChallengeLevelOption(
+                    levelType = SettingsManager.Difficulty.MEDIUM,
+                    displayTitle = "Medium",
+                    displayDescription = "AI makes 50% random, 50% optimal moves",
+                    isChosen = chosenDifficulty == SettingsManager.Difficulty.MEDIUM,
+                    onChoose = {
+                        chosenDifficulty = SettingsManager.Difficulty.MEDIUM
+                        SettingsManager.updateDifficulty(appContext, SettingsManager.Difficulty.MEDIUM)
                     }
                 )
 
-                DifficultyOption(
-                    difficulty = SettingsManager.Difficulty.HARD,
-                    title = "Hard",
-                    description = "AI always makes optimal moves",
-                    selected = selectedDifficulty == SettingsManager.Difficulty.HARD,
-                    onSelect = {
-                        selectedDifficulty = SettingsManager.Difficulty.HARD
-                        SettingsManager.setDifficulty(context, SettingsManager.Difficulty.HARD)
+                ChallengeLevelOption(
+                    levelType = SettingsManager.Difficulty.HARD,
+                    displayTitle = "Hard",
+                    displayDescription = "AI always makes optimal moves",
+                    isChosen = chosenDifficulty == SettingsManager.Difficulty.HARD,
+                    onChoose = {
+                        chosenDifficulty = SettingsManager.Difficulty.HARD
+                        SettingsManager.updateDifficulty(appContext, SettingsManager.Difficulty.HARD)
                     }
                 )
             }
@@ -160,7 +179,7 @@ fun SettingsScreen(onBack: () -> Unit) {
 
         // Back button
         Button(
-            onClick = onBack,
+            onClick = exitAction,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
@@ -170,40 +189,21 @@ fun SettingsScreen(onBack: () -> Unit) {
     }
 }
 
-@Composable
-fun DifficultyOption(
-    difficulty: SettingsManager.Difficulty,
-    title: String,
-    description: String,
-    selected: Boolean,
-    onSelect: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .selectable(
-                selected = selected,
-                onClick = onSelect
-            )
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        RadioButton(
-            selected = selected,
-            onClick = onSelect
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Column {
-            Text(
-                text = title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Text(
-                text = description,
-                fontSize = 12.sp,
-                color = Color.Gray
-            )
+class SettingsActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        setContent {
+            TicTacToeTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    ConfigurationDisplay(
+                        exitAction = { finish() }
+                    )
+                }
+            }
         }
     }
 }

@@ -21,35 +21,71 @@ import com.example.tic_tac_toe.ui.theme.TicTacToeTheme
 import java.text.SimpleDateFormat
 import java.util.*
 
-class HistoryActivity : ComponentActivity() {
-    private lateinit var database: AppDatabase
+@Composable
+fun HistoricalGameItem(gameRecord: GameHistory) {
+    val timestampFormatter = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
+    val formattedTimestamp = timestampFormatter.format(Date(gameRecord.timestampValue))
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        database = AppDatabase.getDatabase(this)
-
-        setContent {
-            TicTacToeTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    HistoryScreen(
-                        database = database,
-                        onBack = { finish() }
-                    )
-                }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth(),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                // Date/Time
+                Text(
+                    text = formattedTimestamp,
+                    fontSize = 14.sp,
+                    color = Color.Gray
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Winner
+                Text(
+                    text = when (gameRecord.victoriousPlayer) {
+                        "X" -> "Winner: X (You)"
+                        "O" -> "Winner: O (${if (gameRecord.playMode == "Computer") "AI" else "Opponent"})"
+                        else -> "Result: Draw"
+                    },
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = when (gameRecord.victoriousPlayer) {
+                        "X" -> Color(0xFF4CAF50)
+                        "O" -> Color(0xFFF44336)
+                        else -> Color.Gray
+                    }
+                )
+                
+                Spacer(modifier = Modifier.height(4.dp))
+                
+                // Game mode and difficulty
+                Text(
+                    text = "Mode: ${gameRecord.playMode} | Difficulty: ${gameRecord.challengeLevel}",
+                    fontSize = 14.sp,
+                    color = Color.DarkGray
+                )
             }
         }
     }
 }
 
 @Composable
-fun HistoryScreen(
-    database: AppDatabase,
-    onBack: () -> Unit
+fun GameHistoryDisplay(
+    dataSource: AppDatabase,
+    navigateBack: () -> Unit
 ) {
-    val games by database.gameHistoryDao().getAllGames().collectAsState(initial = emptyList())
+    val recordsList by dataSource.gameHistoryDao().retrieveAllRecords().collectAsState(initial = emptyList())
 
     Column(
         modifier = Modifier
@@ -65,7 +101,7 @@ fun HistoryScreen(
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        if (games.isEmpty()) {
+        if (recordsList.isEmpty()) {
             // Empty state
             Box(
                 modifier = Modifier
@@ -87,8 +123,8 @@ fun HistoryScreen(
                     .fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(games) { game ->
-                    GameHistoryItem(game)
+                items(recordsList) { record ->
+                    HistoricalGameItem(record)
                 }
             }
         }
@@ -96,7 +132,7 @@ fun HistoryScreen(
         // Back button
         Spacer(modifier = Modifier.height(16.dp))
         Button(
-            onClick = onBack,
+            onClick = navigateBack,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp)
@@ -106,60 +142,24 @@ fun HistoryScreen(
     }
 }
 
-@Composable
-fun GameHistoryItem(game: GameHistory) {
-    val dateFormat = SimpleDateFormat("MMM dd, yyyy 'at' hh:mm a", Locale.getDefault())
-    val dateString = dateFormat.format(Date(game.timestamp))
+class HistoryActivity : ComponentActivity() {
+    private lateinit var databaseInstance: AppDatabase
 
-    Card(
-        modifier = Modifier
-            .fillMaxWidth(),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                modifier = Modifier.weight(1f)
-            ) {
-                // Date/Time
-                Text(
-                    text = dateString,
-                    fontSize = 14.sp,
-                    color = Color.Gray
-                )
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                // Winner
-                Text(
-                    text = when (game.winner) {
-                        "X" -> "Winner: X (You)"
-                        "O" -> "Winner: O (${if (game.gameMode == "Computer") "AI" else "Opponent"})"
-                        else -> "Result: Draw"
-                    },
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = when (game.winner) {
-                        "X" -> Color(0xFF4CAF50)
-                        "O" -> Color(0xFFF44336)
-                        else -> Color.Gray
-                    }
-                )
-                
-                Spacer(modifier = Modifier.height(4.dp))
-                
-                // Game mode and difficulty
-                Text(
-                    text = "Mode: ${game.gameMode} | Difficulty: ${game.difficultyMode}",
-                    fontSize = 14.sp,
-                    color = Color.DarkGray
-                )
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        databaseInstance = AppDatabase.obtainDatabase(this)
+
+        setContent {
+            TicTacToeTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    GameHistoryDisplay(
+                        dataSource = databaseInstance,
+                        navigateBack = { finish() }
+                    )
+                }
             }
         }
     }

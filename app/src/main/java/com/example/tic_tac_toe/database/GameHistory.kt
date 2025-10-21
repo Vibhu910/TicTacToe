@@ -7,11 +7,11 @@ import java.util.Date
 @Entity(tableName = "game_history")
 data class GameHistory(
     @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
-    val timestamp: Long = System.currentTimeMillis(),
-    val winner: String, // "X", "O", or "Draw"
-    val difficultyMode: String, // "Easy", "Medium", "Hard", or "Human"
-    val gameMode: String // "Computer" or "Human"
+    val recordId: Long = 0,
+    val timestampValue: Long = System.currentTimeMillis(),
+    val victoriousPlayer: String, // "X", "O", or "Draw"
+    val challengeLevel: String, // "Easy", "Medium", "Hard", or "Human"
+    val playMode: String // "Computer" or "Human"
 )
 
 

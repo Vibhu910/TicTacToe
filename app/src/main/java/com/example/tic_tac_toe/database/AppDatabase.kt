@@ -11,17 +11,17 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         @Volatile
-        private var INSTANCE: AppDatabase? = null
+        private var databaseInstance: AppDatabase? = null
 
-        fun getDatabase(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
+        fun obtainDatabase(appContext: Context): AppDatabase {
+            return databaseInstance ?: synchronized(this) {
+                val createdInstance = Room.databaseBuilder(
+                    appContext.applicationContext,
                     AppDatabase::class.java,
                     "tictactoe_database"
                 ).build()
-                INSTANCE = instance
-                instance
+                databaseInstance = createdInstance
+                createdInstance
             }
         }
     }

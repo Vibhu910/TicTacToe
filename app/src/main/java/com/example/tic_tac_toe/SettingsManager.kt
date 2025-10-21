@@ -4,8 +4,8 @@ import android.content.Context
 import android.content.SharedPreferences
 
 object SettingsManager {
-    private const val PREFS = "tictactoe_prefs"
-    private const val DIFFICULTY = "difficulty" // easy, medium, or hard
+    private const val PREFERENCES_NAME = "tictactoe_prefs"
+    private const val KEY_DIFFICULTY = "difficulty" // easy, medium, or hard
 
     enum class Difficulty {
         EASY,
@@ -13,26 +13,23 @@ object SettingsManager {
         HARD
     }
 
-    private fun prefs(ctx: Context): SharedPreferences =
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    private fun accessPreferences(context: Context): SharedPreferences =
+        context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
 
+    fun updateDifficulty(context: Context, level: Difficulty) {
+        val storedValue = when (level) {
+            Difficulty.EASY -> "EASY"
+            Difficulty.MEDIUM -> "MEDIUM"
+            Difficulty.HARD -> "HARD"
+        }
+        accessPreferences(context).edit().putString(KEY_DIFFICULTY, storedValue).apply()
+    }
 
-    fun getDifficulty(ctx: Context): Difficulty = when (
-        prefs(ctx).getString(DIFFICULTY, "EASY")
+    fun retrieveDifficulty(context: Context): Difficulty = when (
+        accessPreferences(context).getString(KEY_DIFFICULTY, "EASY")
     ) {
         "MEDIUM" -> Difficulty.MEDIUM
         "HARD" -> Difficulty.HARD
         else -> Difficulty.EASY
     }
-
-    fun setDifficulty(ctx: Context, diff: Difficulty) {
-        val v = when (diff) {
-            Difficulty.EASY -> "EASY"
-            Difficulty.MEDIUM -> "MEDIUM"
-            Difficulty.HARD -> "HARD"
-        }
-        prefs(ctx).edit().putString(DIFFICULTY, v).apply()
-    }
-
-
 }

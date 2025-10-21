@@ -15,35 +15,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
 @Composable
-fun GameBoard(
-    board: Array<CharArray>,
-    onCellClick: (row: Int, col: Int) -> Unit,
-    enabled: Boolean = true
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        for (row in 0..2) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center
-            ) {
-                for (col in 0..2) {
-                    GameCell(
-                        symbol = board[row][col],
-                        onClick = { if (enabled) onCellClick(row, col) },
-                        enabled = enabled
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun GameCell(
     symbol: Char,
     onClick: () -> Unit,
@@ -72,6 +43,35 @@ fun GameCell(
                 else -> Color.Transparent
             }
         )
+    }
+}
+
+@Composable
+fun GameBoard(
+    board: Array<CharArray>,
+    onCellClick: (row: Int, col: Int) -> Unit,
+    enabled: Boolean = true
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        for (rowIdx in 0..2) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                for (colIdx in 0..2) {
+                    GameCell(
+                        symbol = board[rowIdx][colIdx],
+                        onClick = { if (enabled) onCellClick(rowIdx, colIdx) },
+                        enabled = enabled
+                    )
+                }
+            }
+        }
     }
 }
 

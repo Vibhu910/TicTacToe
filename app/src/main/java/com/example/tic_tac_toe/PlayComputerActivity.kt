@@ -18,154 +18,117 @@ import com.example.tic_tac_toe.ui.theme.TicTacToeTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-class PlayComputerActivity : ComponentActivity() {
-    private lateinit var database: AppDatabase
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        database = AppDatabase.getDatabase(this)
-
-        setContent {
-            TicTacToeTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    GameScreen(
-                        onBack = { finish() },
-                        onSaveGame = { winner, difficulty ->
-                            saveGameToHistory(winner, difficulty)
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-    private fun saveGameToHistory(winner: String, difficulty: String) {
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            database.gameHistoryDao().insertGame(
-                GameHistory(
-                    winner = winner,
-                    difficultyMode = difficulty,
-                    gameMode = "Computer"
-                )
-            )
-        }
-    }
-}
-
 @Composable
-fun GameScreen(
-    onBack: () -> Unit,
-    onSaveGame: (winner: String, difficulty: String) -> Unit
+fun ComputerMatchDisplay(
+    exitToMenu: () -> Unit,
+    recordGameResult: (winner: String, difficulty: String) -> Unit
 ) {
-    val game = remember { GameLogic() }
-    val ai = remember { MinimaxAI() }
-    var boardState by remember { mutableStateOf(game.copyBoard()) }
-    var gameMessage by remember { mutableStateOf("Your turn! (You are X)") }
-    var isAiThinking by remember { mutableStateOf(false) }
-    var canPlayerMove by remember { mutableStateOf(true) }
-    var currentDifficulty by remember { mutableStateOf(SettingsManager.Difficulty.MEDIUM) }
-    var showDifficultyMenu by remember { mutableStateOf(false) }
-    var gameHasBeenSaved by remember { mutableStateOf(false) }
+    val matchInstance = remember { GameLogic() }
+    val aiEngine = remember { MinimaxAI() }
+    var currentGridState by remember { mutableStateOf(matchInstance.duplicateGridState()) }
+    var statusMessage by remember { mutableStateOf("Your turn! (You are X)") }
+    var computerThinking by remember { mutableStateOf(false) }
+    var playerCanAct by remember { mutableStateOf(true) }
+    var selectedDifficulty by remember { mutableStateOf(SettingsManager.Difficulty.MEDIUM) }
+    var displayDifficultyPicker by remember { mutableStateOf(false) }
+    var resultSaved by remember { mutableStateOf(false) }
     
-    val scope = rememberCoroutineScope()
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val coroutineContext = rememberCoroutineScope()
+    val appContext = androidx.compose.ui.platform.LocalContext.current
 
     // Load difficulty from settings
     LaunchedEffect(Unit) {
-        currentDifficulty = SettingsManager.getDifficulty(context)
+        selectedDifficulty = SettingsManager.retrieveDifficulty(appContext)
     }
 
-    fun resetGame() {
-        game.resetGame()
-        boardState = game.copyBoard()
-        gameMessage = "Your turn! (You are X)"
-        canPlayerMove = true
-        isAiThinking = false
-        gameHasBeenSaved = false
+    fun restartMatch() {
+        matchInstance.initializeMatch()
+        currentGridState = matchInstance.duplicateGridState()
+        statusMessage = "Your turn! (You are X)"
+        playerCanAct = true
+        computerThinking = false
+        resultSaved = false
     }
 
-    fun makeAiMove() {
-        if (game.gameOver) return
+    fun executeComputerTurn() {
+        if (matchInstance.matchEnded) return
         
-        scope.launch {
-            isAiThinking = true
-            canPlayerMove = false
-            gameMessage = "AI is thinking..."
+        coroutineContext.launch {
+            computerThinking = true
+            playerCanAct = false
+            statusMessage = "AI is thinking..."
             
             // Add delay for Hard mode to show thinking message
-            if (currentDifficulty == SettingsManager.Difficulty.HARD) {
+            if (selectedDifficulty == SettingsManager.Difficulty.HARD) {
                 delay(500)
             }
             
-            val move = ai.getBestMove(game, currentDifficulty, GameLogic.PLAYER_O)
+            val calculatedMove = aiEngine.determineAiMove(matchInstance, selectedDifficulty, GameLogic.PLAYER_O)
             
-            if (move != null) {
-                game.makeMove(move.first, move.second)
-                boardState = game.copyBoard()
+            if (calculatedMove != null) {
+                matchInstance.executeMove(calculatedMove.first, calculatedMove.second)
+                currentGridState = matchInstance.duplicateGridState()
                 
-                if (game.gameOver) {
-                    if (game.isDraw) {
-                        gameMessage = "It's a draw!"
-                        if (!gameHasBeenSaved) {
-                            onSaveGame("Draw", currentDifficulty.name)
-                            gameHasBeenSaved = true
+                if (matchInstance.matchEnded) {
+                    if (matchInstance.isStalemate) {
+                        statusMessage = "It's a draw!"
+                        if (!resultSaved) {
+                            recordGameResult("Draw", selectedDifficulty.name)
+                            resultSaved = true
                         }
                     } else {
-                        gameMessage = if (game.winner == GameLogic.PLAYER_X) {
+                        statusMessage = if (matchInstance.victoriousPlayer == GameLogic.PLAYER_X) {
                             "You win! (O made three in a row)"
                         } else {
                             "AI wins! (You made three in a row)"
                         }
-                        if (!gameHasBeenSaved) {
-                            onSaveGame(
-                                if (game.winner == GameLogic.PLAYER_X) "X" else "O",
-                                currentDifficulty.name
+                        if (!resultSaved) {
+                            recordGameResult(
+                                if (matchInstance.victoriousPlayer == GameLogic.PLAYER_X) "X" else "O",
+                                selectedDifficulty.name
                             )
-                            gameHasBeenSaved = true
+                            resultSaved = true
                         }
                     }
                 } else {
-                    gameMessage = "Your turn! (You are X)"
-                    canPlayerMove = true
+                    statusMessage = "Your turn! (You are X)"
+                    playerCanAct = true
                 }
             }
             
-            isAiThinking = false
+            computerThinking = false
         }
     }
 
-    fun handleCellClick(row: Int, col: Int) {
-        if (!canPlayerMove || isAiThinking || game.gameOver) return
+    fun processCellSelection(rowIdx: Int, colIdx: Int) {
+        if (!playerCanAct || computerThinking || matchInstance.matchEnded) return
         
-        if (game.makeMove(row, col)) {
-            boardState = game.copyBoard()
+        if (matchInstance.executeMove(rowIdx, colIdx)) {
+            currentGridState = matchInstance.duplicateGridState()
             
-            if (game.gameOver) {
-                if (game.isDraw) {
-                    gameMessage = "It's a draw!"
-                    if (!gameHasBeenSaved) {
-                        onSaveGame("Draw", currentDifficulty.name)
-                        gameHasBeenSaved = true
+            if (matchInstance.matchEnded) {
+                if (matchInstance.isStalemate) {
+                    statusMessage = "It's a draw!"
+                    if (!resultSaved) {
+                        recordGameResult("Draw", selectedDifficulty.name)
+                        resultSaved = true
                     }
                 } else {
-                    gameMessage = if (game.winner == GameLogic.PLAYER_X) {
+                    statusMessage = if (matchInstance.victoriousPlayer == GameLogic.PLAYER_X) {
                         "You win! (O made three in a row)"
                     } else {
                         "AI wins! (You made three in a row)"
                     }
-                    if (!gameHasBeenSaved) {
-                        onSaveGame(
-                            if (game.winner == GameLogic.PLAYER_X) "X" else "O",
-                            currentDifficulty.name
+                    if (!resultSaved) {
+                        recordGameResult(
+                            if (matchInstance.victoriousPlayer == GameLogic.PLAYER_X) "X" else "O",
+                            selectedDifficulty.name
                         )
-                        gameHasBeenSaved = true
+                        resultSaved = true
                     }
                 }
             } else {
-                makeAiMove()
+                executeComputerTurn()
             }
         }
     }
@@ -197,7 +160,7 @@ fun GameScreen(
             )
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                text = "Difficulty: ${currentDifficulty.name}",
+                text = "Difficulty: ${selectedDifficulty.name}",
                 fontSize = 16.sp,
                 fontWeight = FontWeight.Medium
             )
@@ -205,12 +168,12 @@ fun GameScreen(
 
         // Game message
         Text(
-            text = gameMessage,
+            text = statusMessage,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = if (game.gameOver) {
-                if (game.isDraw) Color.Gray
-                else if (game.winner == GameLogic.PLAYER_X) Color(0xFF4CAF50)
+            color = if (matchInstance.matchEnded) {
+                if (matchInstance.isStalemate) Color.Gray
+                else if (matchInstance.victoriousPlayer == GameLogic.PLAYER_X) Color(0xFF4CAF50)
                 else Color(0xFFF44336)
             } else {
                 Color.Black
@@ -219,9 +182,9 @@ fun GameScreen(
 
         // Game board
         GameBoard(
-            board = boardState,
-            onCellClick = { row, col -> handleCellClick(row, col) },
-            enabled = canPlayerMove && !isAiThinking && !game.gameOver
+            board = currentGridState,
+            onCellClick = { rowIdx, colIdx -> processCellSelection(rowIdx, colIdx) },
+            enabled = playerCanAct && !computerThinking && !matchInstance.matchEnded
         )
 
         // Buttons
@@ -230,7 +193,7 @@ fun GameScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
-                onClick = { showDifficultyMenu = true },
+                onClick = { displayDifficultyPicker = true },
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
                     .height(50.dp)
@@ -241,7 +204,7 @@ fun GameScreen(
             Spacer(modifier = Modifier.height(8.dp))
             
             Button(
-                onClick = { resetGame() },
+                onClick = { restartMatch() },
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
                     .height(50.dp),
@@ -255,7 +218,7 @@ fun GameScreen(
             Spacer(modifier = Modifier.height(8.dp))
             
             Button(
-                onClick = onBack,
+                onClick = exitToMenu,
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
                     .height(50.dp),
@@ -269,9 +232,9 @@ fun GameScreen(
     }
 
     // Difficulty selection dialog
-    if (showDifficultyMenu) {
+    if (displayDifficultyPicker) {
         AlertDialog(
-            onDismissRequest = { showDifficultyMenu = false },
+            onDismissRequest = { displayDifficultyPicker = false },
             title = { Text("Select Difficulty") },
             text = {
                 Column {
@@ -279,28 +242,65 @@ fun GameScreen(
                         SettingsManager.Difficulty.EASY to "Easy (Random moves)",
                         SettingsManager.Difficulty.MEDIUM to "Medium (50% random)",
                         SettingsManager.Difficulty.HARD to "Hard (Optimal play)"
-                    ).forEach { (difficulty, description) ->
+                    ).forEach { (level, info) ->
                         Button(
                             onClick = {
-                                currentDifficulty = difficulty
-                                SettingsManager.setDifficulty(context, difficulty)
-                                showDifficultyMenu = false
+                                selectedDifficulty = level
+                                SettingsManager.updateDifficulty(appContext, level)
+                                displayDifficultyPicker = false
                             },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(vertical = 4.dp)
                         ) {
-                            Text("$description")
+                            Text("$info")
                         }
                     }
                 }
             },
             confirmButton = {},
             dismissButton = {
-                TextButton(onClick = { showDifficultyMenu = false }) {
+                TextButton(onClick = { displayDifficultyPicker = false }) {
                     Text("Cancel")
                 }
             }
         )
+    }
+}
+
+class PlayComputerActivity : ComponentActivity() {
+    private lateinit var databaseInstance: AppDatabase
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        databaseInstance = AppDatabase.obtainDatabase(this)
+
+        setContent {
+            TicTacToeTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    ComputerMatchDisplay(
+                        exitToMenu = { finish() },
+                        recordGameResult = { winnerName, difficultyName ->
+                            persistGameRecord(winnerName, difficultyName)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    private fun persistGameRecord(winnerName: String, difficultyName: String) {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            databaseInstance.gameHistoryDao().addGameRecord(
+                GameHistory(
+                    victoriousPlayer = winnerName,
+                    challengeLevel = difficultyName,
+                    playMode = "Computer"
+                )
+            )
+        }
     }
 }

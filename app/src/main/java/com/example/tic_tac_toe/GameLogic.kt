@@ -11,92 +11,41 @@ class GameLogic {
         const val PLAYER_O = 'O'
     }
 
-    var board: Array<CharArray> = Array(3) { CharArray(3) { EMPTY } }
-    var currentPlayer: Char = PLAYER_X
-    var gameOver: Boolean = false
-    var winner: Char = EMPTY
-    var isDraw: Boolean = false
-    var turnCount: Int = 0
+    var gridState: Array<CharArray> = Array(3) { CharArray(3) { EMPTY } }
+    var activePlayer: Char = PLAYER_X
+    var matchEnded: Boolean = false
+    var victoriousPlayer: Char = EMPTY
+    var isStalemate: Boolean = false
+    var moveCounter: Int = 0
 
-    fun resetGame() {
-        board = Array(3) { CharArray(3) { EMPTY } }
-        currentPlayer = PLAYER_X
-        gameOver = false
-        winner = EMPTY
-        isDraw = false
-        turnCount = 0
+    fun duplicateGridState(): Array<CharArray> {
+        return Array(3) { idx -> gridState[idx].copyOf() }
     }
 
-    fun makeMove(row: Int, col: Int): Boolean {
-        if (gameOver || board[row][col] != EMPTY) {
-            return false
-        }
-
-        board[row][col] = currentPlayer
-        turnCount++
-        
-        checkGameStatus()
-        
-        if (!gameOver) {
-            currentPlayer = if (currentPlayer == PLAYER_X) PLAYER_O else PLAYER_X
-        }
-        
-        return true
-    }
-
-    fun checkGameStatus() {
-        // Check for three in a row (which means that player LOSES in Misere)
-        val losingPlayer = checkThreeInRow()
-        
-        if (losingPlayer != EMPTY) {
-            gameOver = true
-            // In Misere, the player who made three in a row LOSES
-            winner = if (losingPlayer == PLAYER_X) PLAYER_O else PLAYER_X
-        } else if (isBoardFull()) {
-            gameOver = true
-            isDraw = true
-        }
-    }
-
-    private fun checkThreeInRow(): Char {
-        // Check rows
-        for (i in 0..2) {
-            if (board[i][0] != EMPTY && 
-                board[i][0] == board[i][1] && 
-                board[i][1] == board[i][2]) {
-                return board[i][0]
+    fun updateGridState(newGrid: Array<CharArray>) {
+        for (rowIdx in 0..2) {
+            for (colIdx in 0..2) {
+                gridState[rowIdx][colIdx] = newGrid[rowIdx][colIdx]
             }
         }
-
-        // Check columns
-        for (i in 0..2) {
-            if (board[0][i] != EMPTY && 
-                board[0][i] == board[1][i] && 
-                board[1][i] == board[2][i]) {
-                return board[0][i]
-            }
-        }
-
-        // Check diagonals
-        if (board[0][0] != EMPTY && 
-            board[0][0] == board[1][1] && 
-            board[1][1] == board[2][2]) {
-            return board[0][0]
-        }
-
-        if (board[0][2] != EMPTY && 
-            board[0][2] == board[1][1] && 
-            board[1][1] == board[2][0]) {
-            return board[0][2]
-        }
-
-        return EMPTY
     }
 
-    private fun isBoardFull(): Boolean {
-        for (i in 0..2) {
-            for (j in 0..2) {
-                if (board[i][j] == EMPTY) {
+    fun collectAvailableMoves(): List<Pair<Int, Int>> {
+        val availablePositions = mutableListOf<Pair<Int, Int>>()
+        for (rowIdx in 0..2) {
+            for (colIdx in 0..2) {
+                if (gridState[rowIdx][colIdx] == EMPTY) {
+                    availablePositions.add(Pair(rowIdx, colIdx))
+                }
+            }
+        }
+        return availablePositions
+    }
+
+    private fun detectGridFull(): Boolean {
+        for (rowIdx in 0..2) {
+            for (colIdx in 0..2) {
+                if (gridState[rowIdx][colIdx] == EMPTY) {
                     return false
                 }
             }
@@ -104,28 +53,79 @@ class GameLogic {
         return true
     }
 
-    fun getAvailableMoves(): List<Pair<Int, Int>> {
-        val moves = mutableListOf<Pair<Int, Int>>()
-        for (i in 0..2) {
-            for (j in 0..2) {
-                if (board[i][j] == EMPTY) {
-                    moves.add(Pair(i, j))
-                }
+    private fun detectThreeConsecutive(): Char {
+        // Check rows
+        for (rowIdx in 0..2) {
+            if (gridState[rowIdx][0] != EMPTY && 
+                gridState[rowIdx][0] == gridState[rowIdx][1] && 
+                gridState[rowIdx][1] == gridState[rowIdx][2]) {
+                return gridState[rowIdx][0]
             }
         }
-        return moves
-    }
 
-    fun copyBoard(): Array<CharArray> {
-        return Array(3) { i -> board[i].copyOf() }
-    }
-
-    fun setBoardState(newBoard: Array<CharArray>) {
-        for (i in 0..2) {
-            for (j in 0..2) {
-                board[i][j] = newBoard[i][j]
+        // Check columns
+        for (colIdx in 0..2) {
+            if (gridState[0][colIdx] != EMPTY && 
+                gridState[0][colIdx] == gridState[1][colIdx] && 
+                gridState[1][colIdx] == gridState[2][colIdx]) {
+                return gridState[0][colIdx]
             }
         }
+
+        // Check diagonals
+        if (gridState[0][0] != EMPTY && 
+            gridState[0][0] == gridState[1][1] && 
+            gridState[1][1] == gridState[2][2]) {
+            return gridState[0][0]
+        }
+
+        if (gridState[0][2] != EMPTY && 
+            gridState[0][2] == gridState[1][1] && 
+            gridState[1][1] == gridState[2][0]) {
+            return gridState[0][2]
+        }
+
+        return EMPTY
+    }
+
+    fun evaluateMatchStatus() {
+        // Check for three in a row (which means that player LOSES in Misere)
+        val losingMarker = detectThreeConsecutive()
+        
+        if (losingMarker != EMPTY) {
+            matchEnded = true
+            // In Misere, the player who made three in a row LOSES
+            victoriousPlayer = if (losingMarker == PLAYER_X) PLAYER_O else PLAYER_X
+        } else if (detectGridFull()) {
+            matchEnded = true
+            isStalemate = true
+        }
+    }
+
+    fun executeMove(rowIdx: Int, colIdx: Int): Boolean {
+        if (matchEnded || gridState[rowIdx][colIdx] != EMPTY) {
+            return false
+        }
+
+        gridState[rowIdx][colIdx] = activePlayer
+        moveCounter++
+        
+        evaluateMatchStatus()
+        
+        if (!matchEnded) {
+            activePlayer = if (activePlayer == PLAYER_X) PLAYER_O else PLAYER_X
+        }
+        
+        return true
+    }
+
+    fun initializeMatch() {
+        gridState = Array(3) { CharArray(3) { EMPTY } }
+        activePlayer = PLAYER_X
+        matchEnded = false
+        victoriousPlayer = EMPTY
+        isStalemate = false
+        moveCounter = 0
     }
 }
 

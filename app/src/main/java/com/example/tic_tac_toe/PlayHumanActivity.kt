@@ -26,130 +26,6 @@ import com.example.tic_tac_toe.database.GameHistory
 import com.example.tic_tac_toe.ui.theme.TicTacToeTheme
 import kotlinx.coroutines.launch
 
-class PlayHumanActivity : ComponentActivity() {
-    private lateinit var database: AppDatabase
-    private lateinit var bluetoothManager: BluetoothManager
-
-    private val requestBluetoothPermissions = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        // Handle permissions result
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        database = AppDatabase.getDatabase(this)
-        bluetoothManager = BluetoothManager(this)
-
-        // Request Bluetooth permissions for Android 12+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            requestBluetoothPermissions.launch(
-                arrayOf(
-                    Manifest.permission.BLUETOOTH_CONNECT,
-                    Manifest.permission.BLUETOOTH_SCAN
-                )
-            )
-        }
-
-        setContent {
-            TicTacToeTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    HumanGameScreen(
-                        bluetoothManager = bluetoothManager,
-                        onBack = { finish() },
-                        onSaveGame = { winner ->
-                            saveGameToHistory(winner)
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        bluetoothManager.closeConnection()
-    }
-
-    private fun saveGameToHistory(winner: String) {
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-            database.gameHistoryDao().insertGame(
-                GameHistory(
-                    winner = winner,
-                    difficultyMode = "N/A",
-                    gameMode = "Human"
-                )
-            )
-        }
-    }
-}
-
-@Composable
-fun HumanGameScreen(
-    bluetoothManager: BluetoothManager,
-    onBack: () -> Unit,
-    onSaveGame: (winner: String) -> Unit
-) {
-    var gameMode by remember { mutableStateOf<GameMode>(GameMode.SelectMode) }
-    var isConnected by remember { mutableStateOf(false) }
-    var connectionMessage by remember { mutableStateOf("") }
-
-    LaunchedEffect(Unit) {
-        bluetoothManager.onConnectionEstablished = {
-            isConnected = true
-            connectionMessage = "Connected!"
-        }
-        bluetoothManager.onConnectionLost = {
-            isConnected = false
-            connectionMessage = "Connection lost"
-            gameMode = GameMode.SelectMode
-        }
-    }
-
-    when (gameMode) {
-        GameMode.SelectMode -> {
-            ModeSelectionScreen(
-                onLocalPlay = { gameMode = GameMode.LocalPlay },
-                onNetworkPlay = { gameMode = GameMode.DeviceSelection },
-                onBack = onBack
-            )
-        }
-        GameMode.LocalPlay -> {
-            LocalGameScreen(
-                onBack = { gameMode = GameMode.SelectMode },
-                onSaveGame = onSaveGame
-            )
-        }
-        GameMode.DeviceSelection -> {
-            DeviceSelectionScreen(
-                bluetoothManager = bluetoothManager,
-                onDeviceSelected = {
-                    gameMode = GameMode.NetworkPlay
-                },
-                onStartServer = {
-                    bluetoothManager.startServer()
-                    gameMode = GameMode.NetworkPlay
-                },
-                onBack = { gameMode = GameMode.SelectMode }
-            )
-        }
-        GameMode.NetworkPlay -> {
-            NetworkGameScreen(
-                bluetoothManager = bluetoothManager,
-                isConnected = isConnected,
-                onBack = {
-                    bluetoothManager.closeConnection()
-                    gameMode = GameMode.SelectMode
-                },
-                onSaveGame = onSaveGame
-            )
-        }
-    }
-}
-
 enum class GameMode {
     SelectMode,
     LocalPlay,
@@ -158,10 +34,10 @@ enum class GameMode {
 }
 
 @Composable
-fun ModeSelectionScreen(
-    onLocalPlay: () -> Unit,
-    onNetworkPlay: () -> Unit,
-    onBack: () -> Unit
+fun PlayModeSelector(
+    selectLocalMatch: () -> Unit,
+    selectNetworkMatch: () -> Unit,
+    exitToMenu: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -180,7 +56,7 @@ fun ModeSelectionScreen(
         Spacer(modifier = Modifier.height(32.dp))
         
         Button(
-            onClick = onLocalPlay,
+            onClick = selectLocalMatch,
             modifier = Modifier
                 .fillMaxWidth(0.8f)
                 .height(60.dp)
@@ -191,7 +67,7 @@ fun ModeSelectionScreen(
         Spacer(modifier = Modifier.height(16.dp))
         
         Button(
-            onClick = onNetworkPlay,
+            onClick = selectNetworkMatch,
             modifier = Modifier
                 .fillMaxWidth(0.8f)
                 .height(60.dp)
@@ -202,7 +78,7 @@ fun ModeSelectionScreen(
         Spacer(modifier = Modifier.height(32.dp))
         
         Button(
-            onClick = onBack,
+            onClick = exitToMenu,
             modifier = Modifier
                 .fillMaxWidth(0.8f)
                 .height(50.dp),
@@ -216,46 +92,46 @@ fun ModeSelectionScreen(
 }
 
 @Composable
-fun LocalGameScreen(
-    onBack: () -> Unit,
-    onSaveGame: (winner: String) -> Unit
+fun SameDeviceMatch(
+    exitToPrevious: () -> Unit,
+    recordMatchResult: (winner: String) -> Unit
 ) {
-    val game = remember { GameLogic() }
-    var boardState by remember { mutableStateOf(game.copyBoard()) }
-    var gameMessage by remember { mutableStateOf("Player X's turn") }
-    var gameHasBeenSaved by remember { mutableStateOf(false) }
+    val matchInstance = remember { GameLogic() }
+    var currentGridState by remember { mutableStateOf(matchInstance.duplicateGridState()) }
+    var statusMessage by remember { mutableStateOf("Player X's turn") }
+    var resultPersisted by remember { mutableStateOf(false) }
 
-    fun handleCellClick(row: Int, col: Int) {
-        if (game.gameOver) return
+    fun processCellSelection(rowIdx: Int, colIdx: Int) {
+        if (matchInstance.matchEnded) return
         
-        if (game.makeMove(row, col)) {
-            boardState = game.copyBoard()
+        if (matchInstance.executeMove(rowIdx, colIdx)) {
+            currentGridState = matchInstance.duplicateGridState()
             
-            if (game.gameOver) {
-                if (game.isDraw) {
-                    gameMessage = "It's a draw!"
-                    if (!gameHasBeenSaved) {
-                        onSaveGame("Draw")
-                        gameHasBeenSaved = true
+            if (matchInstance.matchEnded) {
+                if (matchInstance.isStalemate) {
+                    statusMessage = "It's a draw!"
+                    if (!resultPersisted) {
+                        recordMatchResult("Draw")
+                        resultPersisted = true
                     }
                 } else {
-                    gameMessage = "Player ${game.winner} wins! (Player ${if (game.winner == GameLogic.PLAYER_X) 'O' else 'X'} made three in a row)"
-                    if (!gameHasBeenSaved) {
-                        onSaveGame(game.winner.toString())
-                        gameHasBeenSaved = true
+                    statusMessage = "Player ${matchInstance.victoriousPlayer} wins! (Player ${if (matchInstance.victoriousPlayer == GameLogic.PLAYER_X) 'O' else 'X'} made three in a row)"
+                    if (!resultPersisted) {
+                        recordMatchResult(matchInstance.victoriousPlayer.toString())
+                        resultPersisted = true
                     }
                 }
             } else {
-                gameMessage = "Player ${game.currentPlayer}'s turn"
+                statusMessage = "Player ${matchInstance.activePlayer}'s turn"
             }
         }
     }
 
-    fun resetGame() {
-        game.resetGame()
-        boardState = game.copyBoard()
-        gameMessage = "Player X's turn"
-        gameHasBeenSaved = false
+    fun restartMatch() {
+        matchInstance.initializeMatch()
+        currentGridState = matchInstance.duplicateGridState()
+        statusMessage = "Player X's turn"
+        resultPersisted = false
     }
 
     Column(
@@ -290,18 +166,18 @@ fun LocalGameScreen(
         }
 
         Text(
-            text = gameMessage,
+            text = statusMessage,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = if (game.gameOver) {
-                if (game.isDraw) Color.Gray else Color(0xFF4CAF50)
+            color = if (matchInstance.matchEnded) {
+                if (matchInstance.isStalemate) Color.Gray else Color(0xFF4CAF50)
             } else Color.Black
         )
 
         GameBoard(
-            board = boardState,
-            onCellClick = { row, col -> handleCellClick(row, col) },
-            enabled = !game.gameOver
+            board = currentGridState,
+            onCellClick = { rowIdx, colIdx -> processCellSelection(rowIdx, colIdx) },
+            enabled = !matchInstance.matchEnded
         )
 
         Column(
@@ -309,7 +185,7 @@ fun LocalGameScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
-                onClick = { resetGame() },
+                onClick = { restartMatch() },
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
                     .height(50.dp)
@@ -320,7 +196,7 @@ fun LocalGameScreen(
             Spacer(modifier = Modifier.height(8.dp))
             
             Button(
-                onClick = onBack,
+                onClick = exitToPrevious,
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
                     .height(50.dp),
@@ -335,25 +211,25 @@ fun LocalGameScreen(
 }
 
 @Composable
-fun DeviceSelectionScreen(
-    bluetoothManager: BluetoothManager,
-    onDeviceSelected: () -> Unit,
-    onStartServer: () -> Unit,
-    onBack: () -> Unit
+fun BluetoothDevicePicker(
+    connectionManager: BluetoothManager,
+    deviceChosen: () -> Unit,
+    serverModeActivated: () -> Unit,
+    exitToPrevious: () -> Unit
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    var devices by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
-    var message by remember { mutableStateOf("") }
+    val appContext = androidx.compose.ui.platform.LocalContext.current
+    var availableDevices by remember { mutableStateOf<List<BluetoothDevice>>(emptyList()) }
+    var notificationMessage by remember { mutableStateOf("") }
 
     LaunchedEffect(Unit) {
-        if (!bluetoothManager.isBluetoothAvailable()) {
-            message = "Bluetooth not available on this device"
-        } else if (!bluetoothManager.isBluetoothEnabled()) {
-            message = "Please enable Bluetooth"
+        if (!connectionManager.hasBluetoothCapability()) {
+            notificationMessage = "Bluetooth not available on this device"
+        } else if (!connectionManager.bluetoothActivated()) {
+            notificationMessage = "Please enable Bluetooth"
         } else {
-            devices = bluetoothManager.getPairedDevices()
-            if (devices.isEmpty()) {
-                message = "No paired devices found. Please pair a device first."
+            availableDevices = connectionManager.retrievePairedDeviceList()
+            if (availableDevices.isEmpty()) {
+                notificationMessage = "No paired devices found. Please pair a device first."
             }
         }
     }
@@ -374,8 +250,8 @@ fun DeviceSelectionScreen(
         
         Button(
             onClick = {
-                bluetoothManager.startServer()
-                onStartServer()
+                connectionManager.initiateServerMode()
+                serverModeActivated()
             },
             modifier = Modifier
                 .fillMaxWidth()
@@ -394,25 +270,25 @@ fun DeviceSelectionScreen(
         
         Spacer(modifier = Modifier.height(8.dp))
 
-        if (message.isNotEmpty()) {
+        if (notificationMessage.isNotEmpty()) {
             Text(
-                text = message,
+                text = notificationMessage,
                 fontSize = 14.sp,
                 color = Color.Red,
                 modifier = Modifier.padding(8.dp)
             )
         }
 
-        if (devices.isNotEmpty()) {
+        if (availableDevices.isNotEmpty()) {
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(devices) { device ->
+                items(availableDevices) { targetDevice ->
                     Button(
                         onClick = {
-                            bluetoothManager.connectToDevice(device)
-                            onDeviceSelected()
+                            connectionManager.establishClientConnection(targetDevice)
+                            deviceChosen()
                         },
                         modifier = Modifier
                             .fillMaxWidth()
@@ -420,16 +296,16 @@ fun DeviceSelectionScreen(
                     ) {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                             if (ActivityCompat.checkSelfPermission(
-                                    context,
+                                    appContext,
                                     Manifest.permission.BLUETOOTH_CONNECT
                                 ) == PackageManager.PERMISSION_GRANTED
                             ) {
-                                Text(device.name ?: "Unknown Device")
+                                Text(targetDevice.name ?: "Unknown Device")
                             } else {
                                 Text("Unknown Device")
                             }
                         } else {
-                            Text(device.name ?: "Unknown Device")
+                            Text(targetDevice.name ?: "Unknown Device")
                         }
                     }
                 }
@@ -439,7 +315,7 @@ fun DeviceSelectionScreen(
         Spacer(modifier = Modifier.height(16.dp))
         
         Button(
-            onClick = onBack,
+            onClick = exitToPrevious,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
@@ -453,185 +329,185 @@ fun DeviceSelectionScreen(
 }
 
 @Composable
-fun NetworkGameScreen(
-    bluetoothManager: BluetoothManager,
-    isConnected: Boolean,
-    onBack: () -> Unit,
-    onSaveGame: (winner: String) -> Unit
+fun NetworkBasedMatch(
+    connectionManager: BluetoothManager,
+    connectionActive: Boolean,
+    exitToPrevious: () -> Unit,
+    recordMatchResult: (winner: String) -> Unit
 ) {
-    val game = remember { GameLogic() }
-    var boardState by remember { mutableStateOf(game.copyBoard()) }
-    var gameMessage by remember { mutableStateOf("Waiting for connection...") }
-    var canMove by remember { mutableStateOf(false) }
-    var mySymbol by remember { mutableStateOf<Char?>(null) }
-    var showWhoGoesFirstDialog by remember { mutableStateOf(false) }
-    var gameHasBeenSaved by remember { mutableStateOf(false) }
-    var deviceId by remember { mutableStateOf("") }
-    var opponentId by remember { mutableStateOf("") }
+    val matchInstance = remember { GameLogic() }
+    var currentGridState by remember { mutableStateOf(matchInstance.duplicateGridState()) }
+    var statusMessage by remember { mutableStateOf("Waiting for connection...") }
+    var playerTurnActive by remember { mutableStateOf(false) }
+    var assignedSymbol by remember { mutableStateOf<Char?>(null) }
+    var displayFirstMoveDialog by remember { mutableStateOf(false) }
+    var resultPersisted by remember { mutableStateOf(false) }
+    var localDeviceId by remember { mutableStateOf("") }
+    var remoteDeviceId by remember { mutableStateOf("") }
 
-    val scope = rememberCoroutineScope()
+    val asyncScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
-        deviceId = bluetoothManager.getDeviceId()
+        localDeviceId = connectionManager.retrieveDeviceIdentifier()
     }
 
-    LaunchedEffect(isConnected) {
-        if (isConnected) {
-            showWhoGoesFirstDialog = true
-            gameMessage = "Connected! Choose who goes first"
+    LaunchedEffect(connectionActive) {
+        if (connectionActive) {
+            displayFirstMoveDialog = true
+            statusMessage = "Connected! Choose who goes first"
         }
     }
 
-    bluetoothManager.onMessageReceived = { message ->
-        scope.launch {
-            val gameState = GameStateMessage.fromJson(message)
-            if (gameState != null) {
+    connectionManager.onMessageReceived = { receivedData ->
+        asyncScope.launch {
+            val parsedState = GameStateMessage.fromJson(receivedData)
+            if (parsedState != null) {
                 // Handle who goes first
-                if (gameState.metadata.miniGame.player1Choice.isNotEmpty() && 
-                    gameState.metadata.miniGame.player2Choice.isEmpty()) {
+                if (parsedState.metadata.miniGame.player1Choice.isNotEmpty() && 
+                    parsedState.metadata.miniGame.player2Choice.isEmpty()) {
                     // Opponent chose who goes first, acknowledge it
-                    val response = gameState.copy(
-                        metadata = gameState.metadata.copy(
+                    val acknowledgement = parsedState.copy(
+                        metadata = parsedState.metadata.copy(
                             miniGame = MiniGameData(
-                                player1Choice = gameState.metadata.miniGame.player1Choice,
-                                player2Choice = gameState.metadata.miniGame.player1Choice
+                                player1Choice = parsedState.metadata.miniGame.player1Choice,
+                                player2Choice = parsedState.metadata.miniGame.player1Choice
                             )
                         )
                     )
-                    bluetoothManager.sendMessage(response.toJson())
+                    connectionManager.transmitMessage(acknowledgement.toJson())
                     
                     // Determine our symbol and who moves first
-                    if (gameState.metadata.miniGame.player1Choice == deviceId) {
-                        mySymbol = GameLogic.PLAYER_X
-                        canMove = true
-                        gameMessage = "You go first! (You are X)"
+                    if (parsedState.metadata.miniGame.player1Choice == localDeviceId) {
+                        assignedSymbol = GameLogic.PLAYER_X
+                        playerTurnActive = true
+                        statusMessage = "You go first! (You are X)"
                     } else {
-                        mySymbol = GameLogic.PLAYER_O
-                        canMove = false
-                        gameMessage = "Opponent goes first (You are O)"
+                        assignedSymbol = GameLogic.PLAYER_O
+                        playerTurnActive = false
+                        statusMessage = "Opponent goes first (You are O)"
                     }
-                    showWhoGoesFirstDialog = false
-                } else if (gameState.metadata.miniGame.player1Choice.isNotEmpty() && 
-                           gameState.metadata.miniGame.player2Choice.isNotEmpty()) {
+                    displayFirstMoveDialog = false
+                } else if (parsedState.metadata.miniGame.player1Choice.isNotEmpty() && 
+                           parsedState.metadata.miniGame.player2Choice.isNotEmpty()) {
                     // Both players agreed on who goes first
-                    if (gameState.metadata.miniGame.player1Choice == deviceId) {
-                        mySymbol = GameLogic.PLAYER_X
-                        canMove = true
-                        gameMessage = "You go first! (You are X)"
+                    if (parsedState.metadata.miniGame.player1Choice == localDeviceId) {
+                        assignedSymbol = GameLogic.PLAYER_X
+                        playerTurnActive = true
+                        statusMessage = "You go first! (You are X)"
                     } else {
-                        mySymbol = GameLogic.PLAYER_O
-                        canMove = false
-                        gameMessage = "Opponent goes first (You are O)"
+                        assignedSymbol = GameLogic.PLAYER_O
+                        playerTurnActive = false
+                        statusMessage = "Opponent goes first (You are O)"
                     }
-                    showWhoGoesFirstDialog = false
+                    displayFirstMoveDialog = false
                 }
                 
                 // Handle game state updates
-                if (gameState.gameState.reset) {
-                    game.resetGame()
-                    boardState = game.copyBoard()
-                    gameMessage = if (mySymbol == GameLogic.PLAYER_X) "Your turn!" else "Opponent's turn"
-                    canMove = mySymbol == GameLogic.PLAYER_X
-                    gameHasBeenSaved = false
+                if (parsedState.gameState.reset) {
+                    matchInstance.initializeMatch()
+                    currentGridState = matchInstance.duplicateGridState()
+                    statusMessage = if (assignedSymbol == GameLogic.PLAYER_X) "Your turn!" else "Opponent's turn"
+                    playerTurnActive = assignedSymbol == GameLogic.PLAYER_X
+                    resultPersisted = false
                 } else {
                     // Update board
-                    game.setBoardState(GameStateConverter.listToBoard(gameState.gameState.board))
-                    game.turnCount = gameState.gameState.turn
-                    boardState = game.copyBoard()
+                    matchInstance.updateGridState(GameStateConverter.nestedListToGrid(parsedState.gameState.board))
+                    matchInstance.moveCounter = parsedState.gameState.turn
+                    currentGridState = matchInstance.duplicateGridState()
                     
                     // Check game status
-                    game.checkGameStatus()
+                    matchInstance.evaluateMatchStatus()
                     
-                    if (gameState.gameState.draw || gameState.gameState.winner.isNotEmpty()) {
-                        game.gameOver = true
-                        if (gameState.gameState.draw) {
-                            gameMessage = "It's a draw!"
-                            if (!gameHasBeenSaved) {
-                                onSaveGame("Draw")
-                                gameHasBeenSaved = true
+                    if (parsedState.gameState.draw || parsedState.gameState.winner.isNotEmpty()) {
+                        matchInstance.matchEnded = true
+                        if (parsedState.gameState.draw) {
+                            statusMessage = "It's a draw!"
+                            if (!resultPersisted) {
+                                recordMatchResult("Draw")
+                                resultPersisted = true
                             }
                         } else {
-                            val winnerSymbol = gameState.gameState.winner
-                            gameMessage = if (winnerSymbol == deviceId) {
+                            val victorIdentifier = parsedState.gameState.winner
+                            statusMessage = if (victorIdentifier == localDeviceId) {
                                 "You win!"
                             } else {
                                 "Opponent wins!"
                             }
-                            if (!gameHasBeenSaved) {
-                                val winChar = if (winnerSymbol == deviceId) mySymbol.toString() else {
-                                    if (mySymbol == GameLogic.PLAYER_X) "O" else "X"
+                            if (!resultPersisted) {
+                                val winnerSymbol = if (victorIdentifier == localDeviceId) assignedSymbol.toString() else {
+                                    if (assignedSymbol == GameLogic.PLAYER_X) "O" else "X"
                                 }
-                                onSaveGame(winChar)
-                                gameHasBeenSaved = true
+                                recordMatchResult(winnerSymbol)
+                                resultPersisted = true
                             }
                         }
                     } else {
                         // It's our turn now
-                        canMove = true
-                        gameMessage = "Your turn!"
+                        playerTurnActive = true
+                        statusMessage = "Your turn!"
                     }
                 }
             }
         }
     }
 
-    fun handleCellClick(row: Int, col: Int) {
-        if (!canMove || game.gameOver || mySymbol == null) return
+    fun processCellSelection(rowIdx: Int, colIdx: Int) {
+        if (!playerTurnActive || matchInstance.matchEnded || assignedSymbol == null) return
         
-        if (game.makeMove(row, col)) {
-            boardState = game.copyBoard()
-            canMove = false
+        if (matchInstance.executeMove(rowIdx, colIdx)) {
+            currentGridState = matchInstance.duplicateGridState()
+            playerTurnActive = false
             
             // Check if game is over
-            if (game.gameOver) {
-                if (game.isDraw) {
-                    gameMessage = "It's a draw!"
-                    if (!gameHasBeenSaved) {
-                        onSaveGame("Draw")
-                        gameHasBeenSaved = true
+            if (matchInstance.matchEnded) {
+                if (matchInstance.isStalemate) {
+                    statusMessage = "It's a draw!"
+                    if (!resultPersisted) {
+                        recordMatchResult("Draw")
+                        resultPersisted = true
                     }
                 } else {
-                    gameMessage = if (game.winner == mySymbol) {
+                    statusMessage = if (matchInstance.victoriousPlayer == assignedSymbol) {
                         "You win! (Opponent made three in a row)"
                     } else {
                         "Opponent wins! (You made three in a row)"
                     }
-                    if (!gameHasBeenSaved) {
-                        onSaveGame(game.winner.toString())
-                        gameHasBeenSaved = true
+                    if (!resultPersisted) {
+                        recordMatchResult(matchInstance.victoriousPlayer.toString())
+                        resultPersisted = true
                     }
                 }
                 
                 // Send game over state
-                val message = GameStateMessage(
+                val finalStateMessage = GameStateMessage(
                     gameState = GameStateData(
-                        board = GameStateConverter.boardToList(game.board),
-                        turn = game.turnCount,
-                        winner = if (game.winner == mySymbol) deviceId else opponentId,
-                        draw = game.isDraw,
+                        board = GameStateConverter.gridToNestedList(matchInstance.gridState),
+                        turn = matchInstance.moveCounter,
+                        winner = if (matchInstance.victoriousPlayer == assignedSymbol) localDeviceId else remoteDeviceId,
+                        draw = matchInstance.isStalemate,
                         connectionEstablished = true,
                         reset = false
                     ),
                     metadata = MetadataData(
                         choices = listOf(
-                            PlayerChoice("player1", deviceId),
-                            PlayerChoice("player2", opponentId)
+                            PlayerChoice("player1", localDeviceId),
+                            PlayerChoice("player2", remoteDeviceId)
                         ),
                         miniGame = MiniGameData(
-                            player1Choice = if (mySymbol == GameLogic.PLAYER_X) deviceId else opponentId,
-                            player2Choice = if (mySymbol == GameLogic.PLAYER_X) deviceId else opponentId
+                            player1Choice = if (assignedSymbol == GameLogic.PLAYER_X) localDeviceId else remoteDeviceId,
+                            player2Choice = if (assignedSymbol == GameLogic.PLAYER_X) localDeviceId else remoteDeviceId
                         )
                     )
                 )
-                bluetoothManager.sendMessage(message.toJson())
+                connectionManager.transmitMessage(finalStateMessage.toJson())
             } else {
-                gameMessage = "Opponent's turn"
+                statusMessage = "Opponent's turn"
                 
                 // Send move to opponent
-                val message = GameStateMessage(
+                val moveStateMessage = GameStateMessage(
                     gameState = GameStateData(
-                        board = GameStateConverter.boardToList(game.board),
-                        turn = game.turnCount,
+                        board = GameStateConverter.gridToNestedList(matchInstance.gridState),
+                        turn = matchInstance.moveCounter,
                         winner = "",
                         draw = false,
                         connectionEstablished = true,
@@ -639,29 +515,29 @@ fun NetworkGameScreen(
                     ),
                     metadata = MetadataData(
                         choices = listOf(
-                            PlayerChoice("player1", deviceId),
-                            PlayerChoice("player2", opponentId)
+                            PlayerChoice("player1", localDeviceId),
+                            PlayerChoice("player2", remoteDeviceId)
                         ),
                         miniGame = MiniGameData(
-                            player1Choice = if (mySymbol == GameLogic.PLAYER_X) deviceId else opponentId,
-                            player2Choice = if (mySymbol == GameLogic.PLAYER_X) deviceId else opponentId
+                            player1Choice = if (assignedSymbol == GameLogic.PLAYER_X) localDeviceId else remoteDeviceId,
+                            player2Choice = if (assignedSymbol == GameLogic.PLAYER_X) localDeviceId else remoteDeviceId
                         )
                     )
                 )
-                bluetoothManager.sendMessage(message.toJson())
+                connectionManager.transmitMessage(moveStateMessage.toJson())
             }
         }
     }
 
-    fun resetGame() {
-        game.resetGame()
-        boardState = game.copyBoard()
-        gameHasBeenSaved = false
-        canMove = mySymbol == GameLogic.PLAYER_X
-        gameMessage = if (canMove) "Your turn!" else "Opponent's turn"
+    fun restartMatch() {
+        matchInstance.initializeMatch()
+        currentGridState = matchInstance.duplicateGridState()
+        resultPersisted = false
+        playerTurnActive = assignedSymbol == GameLogic.PLAYER_X
+        statusMessage = if (playerTurnActive) "Your turn!" else "Opponent's turn"
         
         // Send reset message
-        val message = GameStateMessage(
+        val resetStateMessage = GameStateMessage(
             gameState = GameStateData(
                 board = List(3) { List(3) { " " } },
                 turn = 0,
@@ -672,16 +548,16 @@ fun NetworkGameScreen(
             ),
             metadata = MetadataData(
                 choices = listOf(
-                    PlayerChoice("player1", deviceId),
-                    PlayerChoice("player2", opponentId)
+                    PlayerChoice("player1", localDeviceId),
+                    PlayerChoice("player2", remoteDeviceId)
                 ),
                 miniGame = MiniGameData(
-                    player1Choice = if (mySymbol == GameLogic.PLAYER_X) deviceId else opponentId,
-                    player2Choice = if (mySymbol == GameLogic.PLAYER_X) deviceId else opponentId
+                    player1Choice = if (assignedSymbol == GameLogic.PLAYER_X) localDeviceId else remoteDeviceId,
+                    player2Choice = if (assignedSymbol == GameLogic.PLAYER_X) localDeviceId else remoteDeviceId
                 )
             )
         )
-        bluetoothManager.sendMessage(message.toJson())
+        connectionManager.transmitMessage(resetStateMessage.toJson())
     }
 
     Column(
@@ -708,9 +584,9 @@ fun NetworkGameScreen(
                 fontWeight = FontWeight.Medium
             )
             Spacer(modifier = Modifier.height(8.dp))
-            if (mySymbol != null) {
+            if (assignedSymbol != null) {
                 Text(
-                    text = "You are: $mySymbol",
+                    text = "You are: $assignedSymbol",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -718,16 +594,16 @@ fun NetworkGameScreen(
         }
 
         Text(
-            text = gameMessage,
+            text = statusMessage,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
-            color = if (game.gameOver) Color(0xFF4CAF50) else Color.Black
+            color = if (matchInstance.matchEnded) Color(0xFF4CAF50) else Color.Black
         )
 
         GameBoard(
-            board = boardState,
-            onCellClick = { row, col -> handleCellClick(row, col) },
-            enabled = canMove && !game.gameOver && isConnected
+            board = currentGridState,
+            onCellClick = { rowIdx, colIdx -> processCellSelection(rowIdx, colIdx) },
+            enabled = playerTurnActive && !matchInstance.matchEnded && connectionActive
         )
 
         Column(
@@ -735,11 +611,11 @@ fun NetworkGameScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Button(
-                onClick = { resetGame() },
+                onClick = { restartMatch() },
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
                     .height(50.dp),
-                enabled = isConnected
+                enabled = connectionActive
             ) {
                 Text("Reset Game", fontSize = 16.sp)
             }
@@ -747,7 +623,7 @@ fun NetworkGameScreen(
             Spacer(modifier = Modifier.height(8.dp))
             
             Button(
-                onClick = onBack,
+                onClick = exitToPrevious,
                 modifier = Modifier
                     .fillMaxWidth(0.8f)
                     .height(50.dp),
@@ -761,7 +637,7 @@ fun NetworkGameScreen(
     }
 
     // Who goes first dialog
-    if (showWhoGoesFirstDialog && isConnected) {
+    if (displayFirstMoveDialog && connectionActive) {
         AlertDialog(
             onDismissRequest = {},
             title = { Text("Who Goes First?") },
@@ -771,13 +647,13 @@ fun NetworkGameScreen(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
-                            mySymbol = GameLogic.PLAYER_X
-                            canMove = true
-                            opponentId = "opponent"
-                            gameMessage = "You go first! (You are X)"
-                            showWhoGoesFirstDialog = false
+                            assignedSymbol = GameLogic.PLAYER_X
+                            playerTurnActive = true
+                            remoteDeviceId = "opponent"
+                            statusMessage = "You go first! (You are X)"
+                            displayFirstMoveDialog = false
                             
-                            val message = GameStateMessage(
+                            val initialMessage = GameStateMessage(
                                 gameState = GameStateData(
                                     board = List(3) { List(3) { " " } },
                                     turn = 0,
@@ -788,16 +664,16 @@ fun NetworkGameScreen(
                                 ),
                                 metadata = MetadataData(
                                     choices = listOf(
-                                        PlayerChoice("player1", deviceId),
+                                        PlayerChoice("player1", localDeviceId),
                                         PlayerChoice("player2", "opponent")
                                     ),
                                     miniGame = MiniGameData(
-                                        player1Choice = deviceId,
+                                        player1Choice = localDeviceId,
                                         player2Choice = ""
                                     )
                                 )
                             )
-                            bluetoothManager.sendMessage(message.toJson())
+                            connectionManager.transmitMessage(initialMessage.toJson())
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -806,13 +682,13 @@ fun NetworkGameScreen(
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = {
-                            mySymbol = GameLogic.PLAYER_O
-                            canMove = false
-                            opponentId = "opponent"
-                            gameMessage = "Opponent goes first (You are O)"
-                            showWhoGoesFirstDialog = false
+                            assignedSymbol = GameLogic.PLAYER_O
+                            playerTurnActive = false
+                            remoteDeviceId = "opponent"
+                            statusMessage = "Opponent goes first (You are O)"
+                            displayFirstMoveDialog = false
                             
-                            val message = GameStateMessage(
+                            val initialMessage = GameStateMessage(
                                 gameState = GameStateData(
                                     board = List(3) { List(3) { " " } },
                                     turn = 0,
@@ -823,7 +699,7 @@ fun NetworkGameScreen(
                                 ),
                                 metadata = MetadataData(
                                     choices = listOf(
-                                        PlayerChoice("player1", deviceId),
+                                        PlayerChoice("player1", localDeviceId),
                                         PlayerChoice("player2", "opponent")
                                     ),
                                     miniGame = MiniGameData(
@@ -832,7 +708,7 @@ fun NetworkGameScreen(
                                     )
                                 )
                             )
-                            bluetoothManager.sendMessage(message.toJson())
+                            connectionManager.transmitMessage(initialMessage.toJson())
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -842,5 +718,129 @@ fun NetworkGameScreen(
             },
             confirmButton = {}
         )
+    }
+}
+
+@Composable
+fun HumanGameCoordinator(
+    connectionManager: BluetoothManager,
+    exitToMenu: () -> Unit,
+    recordMatchResult: (winner: String) -> Unit
+) {
+    var selectedMode by remember { mutableStateOf<GameMode>(GameMode.SelectMode) }
+    var networkConnected by remember { mutableStateOf(false) }
+    var connectionStatusMessage by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        connectionManager.onConnectionEstablished = {
+            networkConnected = true
+            connectionStatusMessage = "Connected!"
+        }
+        connectionManager.onConnectionLost = {
+            networkConnected = false
+            connectionStatusMessage = "Connection lost"
+            selectedMode = GameMode.SelectMode
+        }
+    }
+
+    when (selectedMode) {
+        GameMode.SelectMode -> {
+            PlayModeSelector(
+                selectLocalMatch = { selectedMode = GameMode.LocalPlay },
+                selectNetworkMatch = { selectedMode = GameMode.DeviceSelection },
+                exitToMenu = exitToMenu
+            )
+        }
+        GameMode.LocalPlay -> {
+            SameDeviceMatch(
+                exitToPrevious = { selectedMode = GameMode.SelectMode },
+                recordMatchResult = recordMatchResult
+            )
+        }
+        GameMode.DeviceSelection -> {
+            BluetoothDevicePicker(
+                connectionManager = connectionManager,
+                deviceChosen = {
+                    selectedMode = GameMode.NetworkPlay
+                },
+                serverModeActivated = {
+                    connectionManager.initiateServerMode()
+                    selectedMode = GameMode.NetworkPlay
+                },
+                exitToPrevious = { selectedMode = GameMode.SelectMode }
+            )
+        }
+        GameMode.NetworkPlay -> {
+            NetworkBasedMatch(
+                connectionManager = connectionManager,
+                connectionActive = networkConnected,
+                exitToPrevious = {
+                    connectionManager.terminateConnection()
+                    selectedMode = GameMode.SelectMode
+                },
+                recordMatchResult = recordMatchResult
+            )
+        }
+    }
+}
+
+class PlayHumanActivity : ComponentActivity() {
+    private lateinit var databaseInstance: AppDatabase
+    private lateinit var connectionManager: BluetoothManager
+
+    private val bluetoothPermissionRequester = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        // Handle permissions result
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        databaseInstance = AppDatabase.obtainDatabase(this)
+        connectionManager = BluetoothManager(this)
+
+        // Request Bluetooth permissions for Android 12+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            bluetoothPermissionRequester.launch(
+                arrayOf(
+                    Manifest.permission.BLUETOOTH_CONNECT,
+                    Manifest.permission.BLUETOOTH_SCAN
+                )
+            )
+        }
+
+        setContent {
+            TicTacToeTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    HumanGameCoordinator(
+                        connectionManager = connectionManager,
+                        exitToMenu = { finish() },
+                        recordMatchResult = { winnerName ->
+                            persistGameRecord(winnerName)
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        connectionManager.terminateConnection()
+    }
+
+    private fun persistGameRecord(winnerName: String) {
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+            databaseInstance.gameHistoryDao().addGameRecord(
+                GameHistory(
+                    victoriousPlayer = winnerName,
+                    challengeLevel = "N/A",
+                    playMode = "Human"
+                )
+            )
+        }
     }
 }

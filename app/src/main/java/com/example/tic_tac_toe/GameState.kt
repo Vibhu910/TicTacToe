@@ -9,8 +9,6 @@ data class GameStateMessage(
     val gameState: GameStateData,
     val metadata: MetadataData
 ) {
-    fun toJson(): String = Gson().toJson(this)
-    
     companion object {
         fun fromJson(json: String): GameStateMessage? {
             return try {
@@ -20,7 +18,24 @@ data class GameStateMessage(
             }
         }
     }
+    
+    fun toJson(): String = Gson().toJson(this)
 }
+
+data class MiniGameData(
+    val player1Choice: String,
+    val player2Choice: String
+)
+
+data class PlayerChoice(
+    val id: String,
+    val name: String
+)
+
+data class MetadataData(
+    val choices: List<PlayerChoice>,
+    val miniGame: MiniGameData
+)
 
 data class GameStateData(
     val board: List<List<String>>,
@@ -31,29 +46,14 @@ data class GameStateData(
     val reset: Boolean
 )
 
-data class MetadataData(
-    val choices: List<PlayerChoice>,
-    val miniGame: MiniGameData
-)
-
-data class PlayerChoice(
-    val id: String,
-    val name: String
-)
-
-data class MiniGameData(
-    val player1Choice: String,
-    val player2Choice: String
-)
-
 /**
  * Helper functions for game state conversion
  */
 object GameStateConverter {
-    fun boardToList(board: Array<CharArray>): List<List<String>> {
-        return board.map { row ->
-            row.map { char ->
-                when (char) {
+    fun gridToNestedList(gridState: Array<CharArray>): List<List<String>> {
+        return gridState.map { rowArray ->
+            rowArray.map { cellChar ->
+                when (cellChar) {
                     GameLogic.PLAYER_X -> "X"
                     GameLogic.PLAYER_O -> "O"
                     else -> " "
@@ -62,19 +62,7 @@ object GameStateConverter {
         }
     }
 
-    fun listToBoard(list: List<List<String>>): Array<CharArray> {
-        return Array(3) { i ->
-            CharArray(3) { j ->
-                when (list[i][j]) {
-                    "X" -> GameLogic.PLAYER_X
-                    "O" -> GameLogic.PLAYER_O
-                    else -> GameLogic.EMPTY
-                }
-            }
-        }
-    }
-
-    fun createInitialGameState(deviceId: String): GameStateMessage {
+    fun buildInitialState(deviceIdentifier: String): GameStateMessage {
         return GameStateMessage(
             gameState = GameStateData(
                 board = List(3) { List(3) { " " } },
@@ -86,7 +74,7 @@ object GameStateConverter {
             ),
             metadata = MetadataData(
                 choices = listOf(
-                    PlayerChoice("player1", deviceId),
+                    PlayerChoice("player1", deviceIdentifier),
                     PlayerChoice("player2", "")
                 ),
                 miniGame = MiniGameData(
@@ -95,6 +83,18 @@ object GameStateConverter {
                 )
             )
         )
+    }
+
+    fun nestedListToGrid(nestedList: List<List<String>>): Array<CharArray> {
+        return Array(3) { rowIdx ->
+            CharArray(3) { colIdx ->
+                when (nestedList[rowIdx][colIdx]) {
+                    "X" -> GameLogic.PLAYER_X
+                    "O" -> GameLogic.PLAYER_O
+                    else -> GameLogic.EMPTY
+                }
+            }
+        }
     }
 }
 

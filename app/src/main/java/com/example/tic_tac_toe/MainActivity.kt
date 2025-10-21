@@ -17,25 +17,29 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.tic_tac_toe.ui.theme.TicTacToeTheme
 
-class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContent {
-            TicTacToeTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    MainMenuScreen()
-                }
-            }
-        }
+@Composable
+fun PrimaryMenuButton(label: String, onPress: () -> Unit) {
+    Button(
+        onClick = onPress,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(60.dp),
+        elevation = ButtonDefaults.buttonElevation(
+            defaultElevation = 4.dp,
+            pressedElevation = 8.dp
+        )
+    ) {
+        Text(
+            text = label,
+            fontSize = 18.sp,
+            fontWeight = FontWeight.Medium
+        )
     }
 }
 
 @Composable
-fun MainMenuScreen() {
-    val context = LocalContext.current
+fun HomeMenuDisplay() {
+    val currentContext = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -74,31 +78,31 @@ fun MainMenuScreen() {
             verticalArrangement = Arrangement.spacedBy(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            MenuButton(
-                text = "Play vs Computer",
-                onClick = {
-                    context.startActivity(Intent(context, PlayComputerActivity::class.java))
+            PrimaryMenuButton(
+                label = "Play vs Computer",
+                onPress = {
+                    currentContext.startActivity(Intent(currentContext, PlayComputerActivity::class.java))
                 }
             )
 
-            MenuButton(
-                text = "Play vs Human",
-                onClick = {
-                    context.startActivity(Intent(context, PlayHumanActivity::class.java))
+            PrimaryMenuButton(
+                label = "Play vs Human",
+                onPress = {
+                    currentContext.startActivity(Intent(currentContext, PlayHumanActivity::class.java))
                 }
             )
 
-            MenuButton(
-                text = "Game History",
-                onClick = {
-                    context.startActivity(Intent(context, HistoryActivity::class.java))
+            PrimaryMenuButton(
+                label = "Game History",
+                onPress = {
+                    currentContext.startActivity(Intent(currentContext, HistoryActivity::class.java))
                 }
             )
 
-            MenuButton(
-                text = "Settings",
-                onClick = {
-                    context.startActivity(Intent(context, SettingsActivity::class.java))
+            PrimaryMenuButton(
+                label = "Settings",
+                onPress = {
+                    currentContext.startActivity(Intent(currentContext, SettingsActivity::class.java))
                 }
             )
         }
@@ -114,22 +118,18 @@ fun MainMenuScreen() {
     }
 }
 
-@Composable
-fun MenuButton(text: String, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(60.dp),
-        elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = 4.dp,
-            pressedElevation = 8.dp
-        )
-    ) {
-        Text(
-            text = text,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Medium
-        )
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            TicTacToeTheme {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    HomeMenuDisplay()
+                }
+            }
+        }
     }
 }
