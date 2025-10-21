@@ -66,7 +66,6 @@ fun ConfigurationDisplay(exitAction: () -> Unit) {
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Header
         Text(
             text = "Settings",
             fontSize = 28.sp,
@@ -77,7 +76,6 @@ fun ConfigurationDisplay(exitAction: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Difficulty Section
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -133,7 +131,6 @@ fun ConfigurationDisplay(exitAction: () -> Unit) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Game Rules Card
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -177,7 +174,6 @@ fun ConfigurationDisplay(exitAction: () -> Unit) {
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Back button
         Button(
             onClick = exitAction,
             modifier = Modifier

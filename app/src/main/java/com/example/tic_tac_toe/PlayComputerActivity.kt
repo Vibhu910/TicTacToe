@@ -36,7 +36,6 @@ fun ComputerMatchDisplay(
     val coroutineContext = rememberCoroutineScope()
     val appContext = androidx.compose.ui.platform.LocalContext.current
 
-    // Load difficulty from settings
     LaunchedEffect(Unit) {
         selectedDifficulty = SettingsManager.retrieveDifficulty(appContext)
     }
@@ -58,7 +57,6 @@ fun ComputerMatchDisplay(
             playerCanAct = false
             statusMessage = "AI is thinking..."
             
-            // Add delay for Hard mode to show thinking message
             if (selectedDifficulty == SettingsManager.Difficulty.HARD) {
                 delay(500)
             }
@@ -140,7 +138,6 @@ fun ComputerMatchDisplay(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceBetween
     ) {
-        // Header
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.fillMaxWidth()
@@ -166,7 +163,6 @@ fun ComputerMatchDisplay(
             )
         }
 
-        // Game message
         Text(
             text = statusMessage,
             fontSize = 20.sp,
@@ -180,14 +176,12 @@ fun ComputerMatchDisplay(
             }
         )
 
-        // Game board
         GameBoard(
             board = currentGridState,
             onCellClick = { rowIdx, colIdx -> processCellSelection(rowIdx, colIdx) },
             enabled = playerCanAct && !computerThinking && !matchInstance.matchEnded
         )
 
-        // Buttons
         Column(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -231,7 +225,6 @@ fun ComputerMatchDisplay(
         }
     }
 
-    // Difficulty selection dialog
     if (displayDifficultyPicker) {
         AlertDialog(
             onDismissRequest = { displayDifficultyPicker = false },

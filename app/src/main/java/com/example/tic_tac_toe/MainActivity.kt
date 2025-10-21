@@ -48,7 +48,6 @@ fun HomeMenuDisplay() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.SpaceEvenly
     ) {
-        // Title Section
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(top = 32.dp)
@@ -70,7 +69,6 @@ fun HomeMenuDisplay() {
             )
         }
 
-        // Menu Buttons
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -107,7 +105,6 @@ fun HomeMenuDisplay() {
             )
         }
 
-        // Footer
         Text(
             text = "Choose a game mode to start playing",
             fontSize = 14.sp,

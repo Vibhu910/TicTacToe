@@ -5,7 +5,7 @@ import android.content.SharedPreferences
 
 object SettingsManager {
     private const val PREFERENCES_NAME = "tictactoe_prefs"
-    private const val KEY_DIFFICULTY = "difficulty" // easy, medium, or hard
+    private const val KEY_DIFFICULTY = "difficulty"
 
     enum class Difficulty {
         EASY,

@@ -2,9 +2,6 @@ package com.example.tic_tac_toe
 
 import com.google.gson.Gson
 
-/**
- * Data classes for JSON serialization of game state
- */
 data class GameStateMessage(
     val gameState: GameStateData,
     val metadata: MetadataData
@@ -46,9 +43,6 @@ data class GameStateData(
     val reset: Boolean
 )
 
-/**
- * Helper functions for game state conversion
- */
 object GameStateConverter {
     fun gridToNestedList(gridState: Array<CharArray>): List<List<String>> {
         return gridState.map { rowArray ->
@@ -97,5 +91,3 @@ object GameStateConverter {
         }
     }
 }
-
-

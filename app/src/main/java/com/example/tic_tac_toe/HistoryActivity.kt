@@ -42,7 +42,6 @@ fun HistoricalGameItem(gameRecord: GameHistory) {
             Column(
                 modifier = Modifier.weight(1f)
             ) {
-                // Date/Time
                 Text(
                     text = formattedTimestamp,
                     fontSize = 14.sp,
@@ -51,7 +50,6 @@ fun HistoricalGameItem(gameRecord: GameHistory) {
                 
                 Spacer(modifier = Modifier.height(4.dp))
                 
-                // Winner
                 Text(
                     text = when (gameRecord.victoriousPlayer) {
                         "X" -> "Winner: X (You)"
@@ -69,7 +67,6 @@ fun HistoricalGameItem(gameRecord: GameHistory) {
                 
                 Spacer(modifier = Modifier.height(4.dp))
                 
-                // Game mode and difficulty
                 Text(
                     text = "Mode: ${gameRecord.playMode} | Difficulty: ${gameRecord.challengeLevel}",
                     fontSize = 14.sp,
@@ -92,7 +89,6 @@ fun GameHistoryDisplay(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        // Header
         Text(
             text = "Game History",
             fontSize = 28.sp,
@@ -102,7 +98,6 @@ fun GameHistoryDisplay(
         )
 
         if (recordsList.isEmpty()) {
-            // Empty state
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -116,7 +111,6 @@ fun GameHistoryDisplay(
                 )
             }
         } else {
-            // Game list
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
@@ -129,7 +123,6 @@ fun GameHistoryDisplay(
             }
         }
 
-        // Back button
         Spacer(modifier = Modifier.height(16.dp))
         Button(
             onClick = navigateBack,

@@ -83,20 +83,16 @@ class BluetoothManager(private val appContext: Context) {
                         val receivedContent = String(receiveBuffer, 0, bytesRead)
                         accumulatedMessage.append(receivedContent)
                         
-                        // Check if we have a complete JSON message
                         val completeContent = accumulatedMessage.toString()
                         if (completeContent.contains("}}}")) {
-                            // We have a complete message
                             val extractedJson = completeContent.substringBefore("}}}") + "}}}"
                             onMessageReceived?.invoke(extractedJson)
                             
-                            // Keep any remaining data for next message
                             val leftoverData = completeContent.substringAfter("}}}", "")
                             accumulatedMessage.clear()
                             accumulatedMessage.append(leftoverData)
                         }
                     } else {
-                        // Connection lost
                         currentlyConnected = false
                         onConnectionLost?.invoke()
                         break
@@ -125,7 +121,7 @@ class BluetoothManager(private val appContext: Context) {
                 }
                 
                 activeSocket = targetDevice.createRfcommSocketToServiceRecord(SERVICE_UUID)
-                activeSocket?.connect() // Blocking call
+                activeSocket?.connect()
                 
                 if (activeSocket?.isConnected == true) {
                     currentlyConnected = true
@@ -159,7 +155,7 @@ class BluetoothManager(private val appContext: Context) {
                 listeningSocket = btAdapter?.listenUsingRfcommWithServiceRecord(SERVICE_NAME, SERVICE_UUID)
                 currentlyListening = true
                 
-                activeSocket = listeningSocket?.accept() // Blocking call
+                activeSocket = listeningSocket?.accept()
                 
                 if (activeSocket != null) {
                     currentlyConnected = true
@@ -205,5 +201,3 @@ class BluetoothManager(private val appContext: Context) {
         return currentlyConnected
     }
 }
-
-

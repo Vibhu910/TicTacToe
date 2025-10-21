@@ -9,9 +9,7 @@ data class GameHistory(
     @PrimaryKey(autoGenerate = true)
     val recordId: Long = 0,
     val timestampValue: Long = System.currentTimeMillis(),
-    val victoriousPlayer: String, // "X", "O", or "Draw"
-    val challengeLevel: String, // "Easy", "Medium", "Hard", or "Human"
-    val playMode: String // "Computer" or "Human"
+    val victoriousPlayer: String,
+    val challengeLevel: String,
+    val playMode: String
 )
-
-

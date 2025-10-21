@@ -1,9 +1,5 @@
 package com.example.tic_tac_toe
 
-/**
- * Core game logic for Misere Tic-Tac-Toe
- * In Misere variant, getting 3 in a row means you LOSE
- */
 class GameLogic {
     companion object {
         const val EMPTY = ' '
@@ -54,7 +50,6 @@ class GameLogic {
     }
 
     private fun detectThreeConsecutive(): Char {
-        // Check rows
         for (rowIdx in 0..2) {
             if (gridState[rowIdx][0] != EMPTY && 
                 gridState[rowIdx][0] == gridState[rowIdx][1] && 
@@ -63,7 +58,6 @@ class GameLogic {
             }
         }
 
-        // Check columns
         for (colIdx in 0..2) {
             if (gridState[0][colIdx] != EMPTY && 
                 gridState[0][colIdx] == gridState[1][colIdx] && 
@@ -72,7 +66,6 @@ class GameLogic {
             }
         }
 
-        // Check diagonals
         if (gridState[0][0] != EMPTY && 
             gridState[0][0] == gridState[1][1] && 
             gridState[1][1] == gridState[2][2]) {
@@ -89,12 +82,10 @@ class GameLogic {
     }
 
     fun evaluateMatchStatus() {
-        // Check for three in a row (which means that player LOSES in Misere)
         val losingMarker = detectThreeConsecutive()
         
         if (losingMarker != EMPTY) {
             matchEnded = true
-            // In Misere, the player who made three in a row LOSES
             victoriousPlayer = if (losingMarker == PLAYER_X) PLAYER_O else PLAYER_X
         } else if (detectGridFull()) {
             matchEnded = true
@@ -128,4 +119,3 @@ class GameLogic {
         moveCounter = 0
     }
 }
-

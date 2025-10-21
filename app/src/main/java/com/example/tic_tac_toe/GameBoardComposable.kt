@@ -38,8 +38,8 @@ fun GameCell(
             fontSize = 48.sp,
             fontWeight = FontWeight.Bold,
             color = when (symbol) {
-                GameLogic.PLAYER_X -> Color(0xFF2196F3) // Blue for X
-                GameLogic.PLAYER_O -> Color(0xFFF44336) // Red for O
+                GameLogic.PLAYER_X -> Color(0xFF2196F3)
+                GameLogic.PLAYER_O -> Color(0xFFF44336)
                 else -> Color.Transparent
             }
         )
@@ -74,5 +74,3 @@ fun GameBoard(
         }
     }
 }
-
-
