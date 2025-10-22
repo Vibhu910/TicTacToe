@@ -355,6 +355,15 @@ fun NetworkBasedMatch(
         if (connectionActive) {
             displayFirstMoveDialog = true
             statusMessage = "Connected! Choose who goes first"
+        } else {
+            displayFirstMoveDialog = false
+            statusMessage = "Waiting for connection..."
+            // Reset game state when connection is lost
+            matchInstance.initializeMatch()
+            currentGridState = matchInstance.duplicateGridState()
+            playerTurnActive = false
+            assignedSymbol = null
+            resultPersisted = false
         }
     }
 
@@ -739,7 +748,7 @@ fun HumanGameCoordinator(
         connectionManager.onConnectionLost = {
             networkConnected = false
             connectionStatusMessage = "Connection lost"
-            selectedMode = GameMode.SelectMode
+            // Don't automatically reset to SelectMode - let user decide
         }
     }
 
@@ -761,13 +770,18 @@ fun HumanGameCoordinator(
             BluetoothDevicePicker(
                 connectionManager = connectionManager,
                 deviceChosen = {
+                    connectionManager.resetConnectionState() // Reset state before connecting
                     selectedMode = GameMode.NetworkPlay
                 },
                 serverModeActivated = {
+                    connectionManager.resetConnectionState() // Reset state before starting server
                     connectionManager.initiateServerMode()
                     selectedMode = GameMode.NetworkPlay
                 },
-                exitToPrevious = { selectedMode = GameMode.SelectMode }
+                exitToPrevious = { 
+                    connectionManager.terminateConnection()
+                    selectedMode = GameMode.SelectMode 
+                }
             )
         }
         GameMode.NetworkPlay -> {

@@ -200,4 +200,9 @@ class BluetoothManager(private val appContext: Context) {
     fun verifyConnectionStatus(): Boolean {
         return currentlyConnected
     }
+    
+    fun resetConnectionState() {
+        currentlyConnected = false
+        currentlyListening = false
+    }
 }
