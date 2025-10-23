@@ -352,9 +352,21 @@ fun NetworkBasedMatch(
     }
 
     LaunchedEffect(connectionActive) {
-        if (connectionActive) {
-            displayFirstMoveDialog = true
-            statusMessage = "Connected! Choose who goes first"
+        println("DEBUG: LaunchedEffect - connectionActive: $connectionActive")
+        
+        // Validate connection state with BluetoothManager
+        val actualConnectionState = connectionManager.validateConnectionState()
+        println("DEBUG: Actual connection state: $actualConnectionState")
+        
+        if (connectionActive && actualConnectionState) {
+            // Only show dialog if we haven't assigned symbols yet
+            if (assignedSymbol == null) {
+                displayFirstMoveDialog = true
+                statusMessage = "Connected! Choose who goes first"
+                println("DEBUG: Connection active - showing dialog")
+            } else {
+                println("DEBUG: Connection active but symbols already assigned: $assignedSymbol")
+            }
         } else {
             displayFirstMoveDialog = false
             statusMessage = "Waiting for connection..."
@@ -364,64 +376,127 @@ fun NetworkBasedMatch(
             playerTurnActive = false
             assignedSymbol = null
             resultPersisted = false
+            println("DEBUG: Connection lost - resetting game state")
         }
     }
 
     connectionManager.onMessageReceived = { receivedData ->
         asyncScope.launch {
-            val parsedState = GameStateMessage.fromJson(receivedData)
-            if (parsedState != null) {
-                // Handle who goes first
-                if (parsedState.metadata.miniGame.player1Choice.isNotEmpty() && 
-                    parsedState.metadata.miniGame.player2Choice.isEmpty()) {
-                    // Opponent chose who goes first, acknowledge it
-                    val acknowledgement = parsedState.copy(
-                        metadata = parsedState.metadata.copy(
-                            miniGame = MiniGameData(
-                                player1Choice = parsedState.metadata.miniGame.player1Choice,
-                                player2Choice = parsedState.metadata.miniGame.player1Choice
+            try {
+                println("DEBUG: Message received, processing...")
+                val parsedState = GameStateMessage.fromJson(receivedData)
+                if (parsedState != null) {
+                    // Handle who goes first - improved logic
+                    if (parsedState.metadata.miniGame.player1Choice.isNotEmpty() && 
+                        parsedState.metadata.miniGame.player2Choice.isEmpty()) {
+                        // Opponent chose who goes first, acknowledge it properly
+                        val acknowledgement = parsedState.copy(
+                            metadata = parsedState.metadata.copy(
+                                miniGame = MiniGameData(
+                                    player1Choice = parsedState.metadata.miniGame.player1Choice,
+                                    player2Choice = localDeviceId  // Fix: Use our device ID, not theirs
+                                )
                             )
                         )
-                    )
-                    connectionManager.transmitMessage(acknowledgement.toJson())
-                    
-                    // Determine our symbol and who moves first
-                    if (parsedState.metadata.miniGame.player1Choice == localDeviceId) {
-                        assignedSymbol = GameLogic.PLAYER_X
-                        playerTurnActive = true
-                        statusMessage = "You go first! (You are X)"
-                    } else {
-                        assignedSymbol = GameLogic.PLAYER_O
-                        playerTurnActive = false
-                        statusMessage = "Opponent goes first (You are O)"
+                        connectionManager.transmitMessage(acknowledgement.toJson())
+                        
+                        // Determine our symbol and who moves first
+                        println("DEBUG: Received player1Choice: ${parsedState.metadata.miniGame.player1Choice}")
+                        println("DEBUG: Our localDeviceId: $localDeviceId")
+                        println("DEBUG: Comparison result: ${parsedState.metadata.miniGame.player1Choice == localDeviceId}")
+                        println("DEBUG: Message received from opponent - processing symbol assignment")
+                        
+                        // Update remote device ID from the message
+                        if (parsedState.metadata.choices.isNotEmpty()) {
+                            val remoteChoice = parsedState.metadata.choices.find { it.name != localDeviceId }
+                            if (remoteChoice != null) {
+                                remoteDeviceId = remoteChoice.name
+                                println("DEBUG: Updated remoteDeviceId to: $remoteDeviceId")
+                            }
+                        }
+                        
+                        if (parsedState.metadata.miniGame.player1Choice == "OPPONENT_SHOULD_GO_FIRST") {
+                            // Special case: Opponent chose to let us go first
+                            assignedSymbol = GameLogic.PLAYER_X
+                            matchInstance.setPlayerSymbol(GameLogic.PLAYER_X)
+                            playerTurnActive = true
+                            statusMessage = "You go first! (You are X)"
+                            println("DEBUG: OPPONENT_SHOULD_GO_FIRST - Assigned as PLAYER_X (opponent chose us)")
+                            println("DEBUG: OPPONENT_SHOULD_GO_FIRST - playerTurnActive: $playerTurnActive, statusMessage: $statusMessage")
+                        } else if (parsedState.metadata.miniGame.player1Choice == localDeviceId) {
+                            assignedSymbol = GameLogic.PLAYER_X
+                            matchInstance.setPlayerSymbol(GameLogic.PLAYER_X)
+                            playerTurnActive = true
+                            statusMessage = "You go first! (You are X)"
+                            println("DEBUG: Assigned as PLAYER_X")
+                        } else {
+                            assignedSymbol = GameLogic.PLAYER_O
+                            matchInstance.setPlayerSymbol(GameLogic.PLAYER_O)
+                            playerTurnActive = false
+                            statusMessage = "Opponent goes first (You are O)"
+                            println("DEBUG: Assigned as PLAYER_O")
+                            println("DEBUG: playerTurnActive = $playerTurnActive")
+                            println("DEBUG: statusMessage = $statusMessage")
+                            println("DEBUG: assignedSymbol value = '$assignedSymbol'")
+                            println("DEBUG: assignedSymbol type = ${assignedSymbol?.javaClass?.simpleName}")
+                            // Force UI recomposition
+                            currentGridState = matchInstance.duplicateGridState()
+                        }
+                        displayFirstMoveDialog = false
+                    } else if (parsedState.metadata.miniGame.player1Choice.isNotEmpty() && 
+                               parsedState.metadata.miniGame.player2Choice.isNotEmpty()) {
+                        // Both players agreed on who goes first
+                        
+                        // Update remote device ID from the message
+                        if (parsedState.metadata.choices.isNotEmpty()) {
+                            val remoteChoice = parsedState.metadata.choices.find { it.name != localDeviceId }
+                            if (remoteChoice != null) {
+                                remoteDeviceId = remoteChoice.name
+                                println("DEBUG: Acknowledgement - Updated remoteDeviceId to: $remoteDeviceId")
+                            }
+                        }
+                        if (parsedState.metadata.miniGame.player1Choice == localDeviceId) {
+                            assignedSymbol = GameLogic.PLAYER_X
+                            matchInstance.setPlayerSymbol(GameLogic.PLAYER_X)
+                            playerTurnActive = true
+                            statusMessage = "You go first! (You are X)"
+                        } else {
+                            assignedSymbol = GameLogic.PLAYER_O
+                            matchInstance.setPlayerSymbol(GameLogic.PLAYER_O)
+                            playerTurnActive = false
+                            statusMessage = "Opponent goes first (You are O)"
+                            println("DEBUG: Acknowledgement - Assigned as PLAYER_O")
+                            println("DEBUG: Acknowledgement - playerTurnActive = $playerTurnActive")
+                            println("DEBUG: Acknowledgement - statusMessage = $statusMessage")
+                            println("DEBUG: Acknowledgement - assignedSymbol value = '$assignedSymbol'")
+                            println("DEBUG: Acknowledgement - assignedSymbol type = ${assignedSymbol?.javaClass?.simpleName}")
+                            // Force UI recomposition
+                            currentGridState = matchInstance.duplicateGridState()
+                        }
+                        displayFirstMoveDialog = false
                     }
-                    displayFirstMoveDialog = false
-                } else if (parsedState.metadata.miniGame.player1Choice.isNotEmpty() && 
-                           parsedState.metadata.miniGame.player2Choice.isNotEmpty()) {
-                    // Both players agreed on who goes first
-                    if (parsedState.metadata.miniGame.player1Choice == localDeviceId) {
-                        assignedSymbol = GameLogic.PLAYER_X
-                        playerTurnActive = true
-                        statusMessage = "You go first! (You are X)"
-                    } else {
-                        assignedSymbol = GameLogic.PLAYER_O
-                        playerTurnActive = false
-                        statusMessage = "Opponent goes first (You are O)"
-                    }
-                    displayFirstMoveDialog = false
-                }
                 
                 // Handle game state updates
                 if (parsedState.gameState.reset) {
+                    // Reset the game completely
                     matchInstance.initializeMatch()
                     currentGridState = matchInstance.duplicateGridState()
-                    statusMessage = if (assignedSymbol == GameLogic.PLAYER_X) "Your turn!" else "Opponent's turn"
-                    playerTurnActive = assignedSymbol == GameLogic.PLAYER_X
+                    assignedSymbol = null
+                    playerTurnActive = false
+                    statusMessage = "Choose who goes first"
+                    displayFirstMoveDialog = true
                     resultPersisted = false
+                    println("DEBUG: Reset message received - resetting game and showing dialog")
                 } else {
-                    // Update board
-                    matchInstance.updateGridState(GameStateConverter.nestedListToGrid(parsedState.gameState.board))
-                    matchInstance.moveCounter = parsedState.gameState.turn
+                    // Update board with proper synchronization
+                    val newGridState = GameStateConverter.nestedListToGrid(parsedState.gameState.board)
+                    matchInstance.updateGridState(newGridState)
+                    
+                    // Sync move counter properly - only update if it's higher (prevent rollback)
+                    if (parsedState.gameState.turn >= matchInstance.moveCounter) {
+                        matchInstance.moveCounter = parsedState.gameState.turn
+                    }
+                    
                     currentGridState = matchInstance.duplicateGridState()
                     
                     // Check game status
@@ -437,35 +512,90 @@ fun NetworkBasedMatch(
                             }
                         } else {
                             val victorIdentifier = parsedState.gameState.winner
-                            statusMessage = if (victorIdentifier == localDeviceId) {
-                                "You win!"
-                            } else {
-                                "Opponent wins!"
-                            }
+                            
+                            // Only process winner message if we haven't already recorded our own win
                             if (!resultPersisted) {
-                                val winnerSymbol = if (victorIdentifier == localDeviceId) assignedSymbol.toString() else {
+                                statusMessage = if (victorIdentifier == localDeviceId) {
+                                    "You win!"
+                                } else {
+                                    "Opponent wins!"
+                                }
+                                
+                                val winnerSymbol = if (victorIdentifier == localDeviceId) {
+                                    // We won - record our symbol
+                                    if (assignedSymbol == GameLogic.PLAYER_X) "X" else "O"
+                                } else {
+                                    // Opponent won - record opponent's symbol
                                     if (assignedSymbol == GameLogic.PLAYER_X) "O" else "X"
                                 }
+                                println("DEBUG: Remote winner recording - victorIdentifier: $victorIdentifier, localDeviceId: $localDeviceId, assignedSymbol: $assignedSymbol, winnerSymbol: $winnerSymbol")
+                                println("DEBUG: Remote winner recording - We are the winner: ${victorIdentifier == localDeviceId}")
+                                println("DEBUG: Remote winner recording - Recording as: ${if (victorIdentifier == localDeviceId) "YOU" else "OPPONENT"}")
                                 recordMatchResult(winnerSymbol)
                                 resultPersisted = true
+                            } else {
+                                println("DEBUG: Remote winner message received but result already persisted - ignoring")
                             }
                         }
                     } else {
                         // It's our turn now
                         playerTurnActive = true
-                        statusMessage = "Your turn!"
+                        // Synchronize GameLogic active player with our assigned symbol
+                        assignedSymbol?.let { symbol ->
+                            matchInstance.setPlayerSymbol(symbol)
+                        }
+                        // Check if it's actually our turn
+                        val isActuallyOurTurn = if (matchInstance.moveCounter == 0) {
+                            assignedSymbol == GameLogic.PLAYER_X
+                        } else {
+                            (matchInstance.moveCounter % 2 == 0 && assignedSymbol == GameLogic.PLAYER_X) ||
+                            (matchInstance.moveCounter % 2 == 1 && assignedSymbol == GameLogic.PLAYER_O)
+                        }
+                        statusMessage = if (isActuallyOurTurn) "Your turn!" else "Opponent's turn"
+                        println("DEBUG: Game state update - playerTurnActive = $playerTurnActive, assignedSymbol = $assignedSymbol")
+                        println("DEBUG: Game state update - moveCounter = ${matchInstance.moveCounter}, isActuallyOurTurn = $isActuallyOurTurn")
+                        println("DEBUG: Game state update - statusMessage = $statusMessage")
                     }
                 }
+                }
+            } catch (e: Exception) {
+                // Handle JSON parsing errors gracefully
+                println("Error parsing message: ${e.message}")
             }
         }
+    }
+
+    fun isOurTurn(): Boolean {
+        // Check if it's our turn based on the current game state
+        // If it's the first move (moveCounter == 0), check who should go first
+        val isTurn = if (matchInstance.moveCounter == 0) {
+            // First move: only the player who should go first can move
+            assignedSymbol == GameLogic.PLAYER_X
+        } else {
+            // Subsequent moves: alternate based on move counter
+            (matchInstance.moveCounter % 2 == 0 && assignedSymbol == GameLogic.PLAYER_X) ||
+            (matchInstance.moveCounter % 2 == 1 && assignedSymbol == GameLogic.PLAYER_O)
+        }
+        println("DEBUG: isOurTurn() - moveCounter: ${matchInstance.moveCounter}, assignedSymbol: $assignedSymbol, isTurn: $isTurn")
+        return isTurn
     }
 
     fun processCellSelection(rowIdx: Int, colIdx: Int) {
         if (!playerTurnActive || matchInstance.matchEnded || assignedSymbol == null) return
         
-        if (matchInstance.executeMove(rowIdx, colIdx)) {
+        // Additional validation: ensure it's actually our turn
+        if (!isOurTurn()) {
+            println("DEBUG: Not our turn, ignoring click")
+            return
+        }
+        
+        println("DEBUG: processCellSelection - assignedSymbol = $assignedSymbol")
+        assignedSymbol?.let { symbol ->
+            if (matchInstance.executeMoveWithSymbol(rowIdx, colIdx, symbol)) {
             currentGridState = matchInstance.duplicateGridState()
             playerTurnActive = false
+            // Update GameLogic active player to the next player
+            matchInstance.setPlayerSymbol(matchInstance.getNextPlayer())
             
             // Check if game is over
             if (matchInstance.matchEnded) {
@@ -482,17 +612,31 @@ fun NetworkBasedMatch(
                         "Opponent wins! (You made three in a row)"
                     }
                     if (!resultPersisted) {
-                        recordMatchResult(matchInstance.victoriousPlayer.toString())
+                        val winnerSymbol = if (matchInstance.victoriousPlayer == assignedSymbol) {
+                            // We won - record our symbol
+                            if (assignedSymbol == GameLogic.PLAYER_X) "X" else "O"
+                        } else {
+                            // Opponent won - record opponent's symbol
+                            if (assignedSymbol == GameLogic.PLAYER_X) "O" else "X"
+                        }
+                        println("DEBUG: Local winner recording - victoriousPlayer: ${matchInstance.victoriousPlayer}, assignedSymbol: $assignedSymbol, winnerSymbol: $winnerSymbol")
+                        println("DEBUG: Local winner recording - We are the winner: ${matchInstance.victoriousPlayer == assignedSymbol}")
+                        println("DEBUG: Local winner recording - Recording as: ${if (matchInstance.victoriousPlayer == assignedSymbol) "YOU" else "OPPONENT"}")
+                        recordMatchResult(winnerSymbol)
                         resultPersisted = true
+                    } else {
+                        println("DEBUG: Local winner recording - Result already persisted, skipping")
                     }
                 }
                 
                 // Send game over state
+                val winnerId = if (matchInstance.victoriousPlayer == assignedSymbol) localDeviceId else remoteDeviceId
+                println("DEBUG: Sending winner - victoriousPlayer: ${matchInstance.victoriousPlayer}, assignedSymbol: $assignedSymbol, winnerId: $winnerId")
                 val finalStateMessage = GameStateMessage(
                     gameState = GameStateData(
                         board = GameStateConverter.gridToNestedList(matchInstance.gridState),
                         turn = matchInstance.moveCounter,
-                        winner = if (matchInstance.victoriousPlayer == assignedSymbol) localDeviceId else remoteDeviceId,
+                        winner = winnerId,
                         draw = matchInstance.isStalemate,
                         connectionEstablished = true,
                         reset = false
@@ -536,14 +680,22 @@ fun NetworkBasedMatch(
                 connectionManager.transmitMessage(moveStateMessage.toJson())
             }
         }
+        }
     }
 
     fun restartMatch() {
         matchInstance.initializeMatch()
         currentGridState = matchInstance.duplicateGridState()
         resultPersisted = false
-        playerTurnActive = assignedSymbol == GameLogic.PLAYER_X
-        statusMessage = if (playerTurnActive) "Your turn!" else "Opponent's turn"
+        // Reset symbol assignment for new match
+        assignedSymbol = null
+        playerTurnActive = false
+        statusMessage = "Choose who goes first"
+        displayFirstMoveDialog = true
+        
+        // Force connection state reset to ensure both devices are in sync
+        println("DEBUG: Restarting match - forcing connection state reset")
+        // The connectionActive will be updated by the LaunchedEffect when connection is re-established
         
         // Send reset message
         val resetStateMessage = GameStateMessage(
@@ -608,11 +760,18 @@ fun NetworkBasedMatch(
             fontWeight = FontWeight.Bold,
             color = if (matchInstance.matchEnded) Color(0xFF4CAF50) else Color.Black
         )
+        
+        // Debug display
+        Text(
+            text = "DEBUG: playerTurnActive = $playerTurnActive, assignedSymbol = $assignedSymbol, connectionActive = $connectionActive",
+            fontSize = 12.sp,
+            color = Color.Gray
+        )
 
         GameBoard(
             board = currentGridState,
             onCellClick = { rowIdx, colIdx -> processCellSelection(rowIdx, colIdx) },
-            enabled = playerTurnActive && !matchInstance.matchEnded && connectionActive
+            enabled = playerTurnActive && isOurTurn() && !matchInstance.matchEnded && connectionActive
         )
 
         Column(
@@ -656,11 +815,14 @@ fun NetworkBasedMatch(
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(
                         onClick = {
+                            println("DEBUG: ME button clicked, localDeviceId: $localDeviceId")
                             assignedSymbol = GameLogic.PLAYER_X
                             playerTurnActive = true
+                            // Get remote device ID from message if available, otherwise use placeholder
                             remoteDeviceId = "opponent"
                             statusMessage = "You go first! (You are X)"
                             displayFirstMoveDialog = false
+                            println("DEBUG: ME button - assignedSymbol: $assignedSymbol, playerTurnActive: $playerTurnActive, statusMessage: $statusMessage")
                             
                             val initialMessage = GameStateMessage(
                                 gameState = GameStateData(
@@ -674,7 +836,7 @@ fun NetworkBasedMatch(
                                 metadata = MetadataData(
                                     choices = listOf(
                                         PlayerChoice("player1", localDeviceId),
-                                        PlayerChoice("player2", "opponent")
+                                        PlayerChoice("player2", remoteDeviceId)
                                     ),
                                     miniGame = MiniGameData(
                                         player1Choice = localDeviceId,
@@ -691,11 +853,13 @@ fun NetworkBasedMatch(
                     Spacer(modifier = Modifier.height(8.dp))
                     Button(
                         onClick = {
+                            println("DEBUG: OPPONENT button clicked, localDeviceId: $localDeviceId")
                             assignedSymbol = GameLogic.PLAYER_O
                             playerTurnActive = false
                             remoteDeviceId = "opponent"
                             statusMessage = "Opponent goes first (You are O)"
                             displayFirstMoveDialog = false
+                            println("DEBUG: OPPONENT button - assignedSymbol: $assignedSymbol, playerTurnActive: $playerTurnActive, statusMessage: $statusMessage")
                             
                             val initialMessage = GameStateMessage(
                                 gameState = GameStateData(
@@ -709,10 +873,10 @@ fun NetworkBasedMatch(
                                 metadata = MetadataData(
                                     choices = listOf(
                                         PlayerChoice("player1", localDeviceId),
-                                        PlayerChoice("player2", "opponent")
+                                        PlayerChoice("player2", remoteDeviceId)
                                     ),
                                     miniGame = MiniGameData(
-                                        player1Choice = "opponent",
+                                        player1Choice = "OPPONENT_SHOULD_GO_FIRST",  // Special marker
                                         player2Choice = ""
                                     )
                                 )
@@ -847,6 +1011,7 @@ class PlayHumanActivity : ComponentActivity() {
     }
 
     private fun persistGameRecord(winnerName: String) {
+        println("DEBUG: persistGameRecord - Recording winner: $winnerName")
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             databaseInstance.gameHistoryDao().addGameRecord(
                 GameHistory(
@@ -855,6 +1020,7 @@ class PlayHumanActivity : ComponentActivity() {
                     playMode = "Human"
                 )
             )
+            println("DEBUG: persistGameRecord - Successfully recorded: $winnerName")
         }
     }
 }

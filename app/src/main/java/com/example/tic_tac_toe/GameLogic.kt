@@ -109,6 +109,23 @@ class GameLogic {
         
         return true
     }
+    
+    fun executeMoveWithSymbol(rowIdx: Int, colIdx: Int, playerSymbol: Char): Boolean {
+        if (matchEnded || gridState[rowIdx][colIdx] != EMPTY) {
+            return false
+        }
+
+        gridState[rowIdx][colIdx] = playerSymbol
+        moveCounter++
+        
+        evaluateMatchStatus()
+        
+        if (!matchEnded) {
+            activePlayer = if (activePlayer == PLAYER_X) PLAYER_O else PLAYER_X
+        }
+        
+        return true
+    }
 
     fun initializeMatch() {
         gridState = Array(3) { CharArray(3) { EMPTY } }
@@ -117,5 +134,13 @@ class GameLogic {
         victoriousPlayer = EMPTY
         isStalemate = false
         moveCounter = 0
+    }
+    
+    fun setPlayerSymbol(playerSymbol: Char) {
+        activePlayer = playerSymbol
+    }
+    
+    fun getNextPlayer(): Char {
+        return if (activePlayer == PLAYER_X) PLAYER_O else PLAYER_X
     }
 }

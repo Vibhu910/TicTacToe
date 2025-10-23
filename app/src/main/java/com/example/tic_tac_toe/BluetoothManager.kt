@@ -8,6 +8,7 @@ import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import java.io.IOException
 import java.io.InputStream
@@ -61,7 +62,9 @@ class BluetoothManager(private val appContext: Context) {
     fun transmitMessage(messageContent: String) {
         Thread {
             try {
-                dataOutputStream?.write(messageContent.toByteArray())
+                // Add message delimiter for reliable parsing
+                val messageWithDelimiter = messageContent + "\nEND_MESSAGE\n"
+                dataOutputStream?.write(messageWithDelimiter.toByteArray())
                 dataOutputStream?.flush()
             } catch (e: IOException) {
                 e.printStackTrace()
@@ -84,11 +87,18 @@ class BluetoothManager(private val appContext: Context) {
                         accumulatedMessage.append(receivedContent)
                         
                         val completeContent = accumulatedMessage.toString()
-                        if (completeContent.contains("}}}")) {
-                            val extractedJson = completeContent.substringBefore("}}}") + "}}}"
-                            onMessageReceived?.invoke(extractedJson)
+                        // Use more reliable message delimiter
+                        if (completeContent.contains("\nEND_MESSAGE\n")) {
+                            val messages = completeContent.split("\nEND_MESSAGE\n")
+                            for (i in 0 until messages.size - 1) {
+                                val message = messages[i].trim()
+                                if (message.isNotEmpty()) {
+                                    onMessageReceived?.invoke(message)
+                                }
+                            }
                             
-                            val leftoverData = completeContent.substringAfter("}}}", "")
+                            // Keep any leftover data
+                            val leftoverData = messages.last()
                             accumulatedMessage.clear()
                             accumulatedMessage.append(leftoverData)
                         }
@@ -185,16 +195,24 @@ class BluetoothManager(private val appContext: Context) {
     }
 
     fun retrieveDeviceIdentifier(): String {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (ActivityCompat.checkSelfPermission(
-                    appContext,
-                    Manifest.permission.BLUETOOTH_CONNECT
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                return "Unknown"
-            }
+        return try {
+            val androidId = Settings.Secure.getString(
+                appContext.contentResolver,
+                Settings.Secure.ANDROID_ID
+            ) ?: "Unknown"
+            // Add timestamp to make it unique for emulator testing
+            val uniqueId = androidId + "_" + System.currentTimeMillis()
+            println("DEBUG: Generated device ID: $uniqueId")
+            uniqueId
+        } catch (e: Exception) {
+            "Unknown"
         }
-        return btAdapter?.address ?: "Unknown"
+    }
+    
+    fun validateConnectionState(): Boolean {
+        val isValid = currentlyConnected && dataInputStream != null && dataOutputStream != null
+        println("DEBUG: Connection state validation - currentlyConnected: $currentlyConnected, isValid: $isValid")
+        return isValid
     }
 
     fun verifyConnectionStatus(): Boolean {
